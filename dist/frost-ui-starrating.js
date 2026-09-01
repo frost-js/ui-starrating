@@ -35,335 +35,450 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 
 //#region src/js/star-rating.js
 /**
-	* StarRating Class
-	* @class
+	* @typedef {object} StarRatingOptions
+	* @property {boolean} [animate=true] Whether to animate rating changes.
+	* @property {boolean} [displayOnly=false] Whether the rating is read-only.
+	* @property {boolean} [hover=true] Whether pointer movement previews a rating.
+	* @property {number|null} [max=null] The maximum rating, or `null` to use the star count.
+	* @property {number} [min=0] The minimum rating.
+	* @property {((rating: number) => string)} [ratingText] Returns the accessible text for a rating.
+	* @property {'xs'|'sm'|'md'|'lg'|'xl'} [size='md'] The rating size suffix.
+	* @property {number} [stars=5] The number of rendered stars.
+	* @property {number|'any'} [step=1] The rating increment, or `any` for unrestricted values.
+	* @property {boolean} [tooltip=true] Whether to display rating text in a tooltip.
 	*/
-	var StarRating = class extends _fr0st_ui.BaseComponent {
+	/**
+	* Controls a numeric input using an accessible star rating interface.
+	* @augments {BaseComponent<StarRatingOptions>}
+	*/
+	var StarRating = class StarRating extends _fr0st_ui.BaseComponent {
+		#container;
+		#displayOnly = false;
+		#dragging = false;
+		#filledContainer;
+		#generatedLabelIds = /* @__PURE__ */ new Map();
+		#hidden;
+		#max = 5;
+		#min = 0;
+		#outerContainer;
+		#precision = 0;
+		#rtl = false;
+		#stars = 5;
+		#step = 1;
+		#tabIndex;
+		#tooltip;
+		#tooltipTriggers = /* @__PURE__ */ new Set();
 		/**
-		* New StarRating constructor.
-		* @param {HTMLElement} node The input node.
-		* @param {object} [options] The options to create the StarRating with.
+		* Gets the number of decimal places represented by a finite number.
+		* @param {number} value The number to inspect.
+		* @returns {number} The number of decimal places.
+		*/
+		static #getDecimalPlaces(value) {
+			const [coefficient, exponent = 0] = `${value}`.toLowerCase().split("e");
+			const decimals = (coefficient.split(".")[1] || "").length;
+			return Math.max(0, decimals - Number(exponent));
+		}
+		/**
+		* Parses a finite numeric value.
+		* @param {*} value The value to parse.
+		* @param {number} fallback The fallback value.
+		* @returns {number} The parsed value or fallback.
+		*/
+		static #parseNumber(value, fallback) {
+			if (value === null || value === void 0 || `${value}`.trim() === "") return fallback;
+			const number = Number(value);
+			return Number.isFinite(number) ? number : fallback;
+		}
+		/**
+		* Creates a StarRating.
+		* @param {HTMLInputElement} node The numeric input node.
+		* @param {StarRatingOptions} [options] The StarRating options.
 		*/
 		constructor(node, options) {
 			super(node, options);
-			if (_fr0st_query.default.hasAttribute(this._node, "step")) this._options.step = _fr0st_query.default.getAttribute(this._node, "step");
-			if (_fr0st_query.default.hasAttribute(this._node, "min")) this._options.min = _fr0st_query.default.getAttribute(this._node, "min");
-			if (_fr0st_query.default.hasAttribute(this._node, "max")) this._options.max = _fr0st_query.default.getAttribute(this._node, "max");
-			if (this._options.max === null) this._options.max = this._options.stars;
-			if (_fr0st_query.default.getProperty(this._node, "readOnly")) this._options.displayOnly = true;
-			if (this._options.step) this._stepLength = `${this._options.step}`.replace("d*.?/", "").length;
-			const id = _fr0st_query.default.getAttribute(this._node, "id");
-			this._label = _fr0st_query.default.findOne(`label[for="${id}"]`);
-			if (this._label && !_fr0st_query.default.getAttribute(this._label, "id")) {
-				_fr0st_query.default.setAttribute(this._label, { id: (0, _fr0st_ui.generateId)("starrating-label") });
-				this._labelId = true;
-			}
-			this._render();
-			this._refresh();
-			if (!this._options.displayOnly) this._events();
-			if (this._options.tooltip) this._tooltipEvents();
-			this._refreshDisabled();
+			this.#normalizeOptions();
+			this.#render();
+			this.#refresh();
+			this.#refreshDisabled();
+			this.#events();
+			if (this.options.tooltip) this.#tooltipEvents();
 		}
 		/**
-		* Disable the StarRating.
+		* Disables the StarRating.
 		*/
 		disable() {
-			_fr0st_query.default.setAttribute(this._node, { disabled: true });
-			this._refreshDisabled();
+			_fr0st_query.default.setAttribute(this.node, { disabled: true });
+			this.#refreshDisabled();
 		}
-		/**
-		* Dispose the StarRating.
-		*/
+		/** @inheritdoc */
 		dispose() {
-			if (this._labelId) _fr0st_query.default.removeAttribute(this._label, "id");
-			if (this._tooltip) {
-				this._tooltip.dispose();
-				this._tooltip = null;
-			}
-			_fr0st_query.default.remove(this._outerContainer);
-			_fr0st_query.default.removeAttribute(this._node, "tabindex");
-			_fr0st_query.default.removeEvent(this._node, "focus.ui.starrating");
-			_fr0st_query.default.removeClass(this._node, this.constructor.classes.hide);
-			this._label = null;
-			this._outerContainer = null;
-			this._container = null;
-			this._filledContainer = null;
+			this.#dragging = false;
+			for (const [label, id] of this.#generatedLabelIds) if (_fr0st_query.default.getAttribute(label, "id") === id) _fr0st_query.default.removeAttribute(label, "id");
+			if (this.#tooltip) this.#tooltip.dispose();
+			_fr0st_query.default.remove(this.#outerContainer);
+			_fr0st_query.default.removeEvent(this.node, "change.ui.starrating");
+			_fr0st_query.default.removeEvent(this.node, "focus.ui.starrating");
+			if (this.#hidden) _fr0st_query.default.addClass(this.node, this.constructor.classes.hide);
+			else _fr0st_query.default.removeClass(this.node, this.constructor.classes.hide);
+			if (this.#tabIndex === null) _fr0st_query.default.removeAttribute(this.node, "tabindex");
+			else _fr0st_query.default.setAttribute(this.node, { tabindex: this.#tabIndex });
+			this.#container = null;
+			this.#filledContainer = null;
+			this.#generatedLabelIds = null;
+			this.#outerContainer = null;
+			this.#tooltip = null;
+			this.#tooltipTriggers = null;
 			super.dispose();
 		}
 		/**
-		* Enable the StarRating.
+		* Enables the StarRating.
 		*/
 		enable() {
-			_fr0st_query.default.removeAttribute(this._node, "disabled");
-			this._refreshDisabled();
+			_fr0st_query.default.removeAttribute(this.node, "disabled");
+			this.#refreshDisabled();
 		}
 		/**
-		* Get the current value.
-		* @return {number} The current value.
+		* Gets the current rating.
+		* @returns {number|null} The current rating, or `null` when the input is empty.
 		*/
 		getValue() {
-			const value = _fr0st_query.default.getValue(this._node);
-			return value !== "" ? parseFloat(value) : null;
+			const value = _fr0st_query.default.getValue(this.node);
+			if (value === "") return null;
+			const number = Number(value);
+			return Number.isFinite(number) ? number : null;
 		}
 		/**
-		* Set the current value.
-		* @param {number} value The value to set.
+		* Sets the current rating.
+		* @param {number} value The rating to set.
 		*/
 		setValue(value) {
-			value = parseFloat(value);
-			value = this._clampValue(value);
-			if (value === this.getValue()) return;
-			const percent = this._getPercent(value);
-			_fr0st_query.default.setStyle(this._filledContainer, { width: `${percent}%` });
-			this._updateValue(value);
-			_fr0st_query.default.setValue(this._node, value);
-			_fr0st_query.default.triggerEvent(this._node, "change.ui.starrating");
+			const normalizedValue = this.#normalizeValue(value);
+			if (normalizedValue === null) return;
+			this.#setDisplayedValue(normalizedValue);
+			if (normalizedValue === this.getValue()) return;
+			_fr0st_query.default.setValue(this.node, normalizedValue);
+			_fr0st_query.default.triggerEvent(this.node, "change.ui.starrating", { data: { skipUpdate: true } });
+		}
+		/**
+		* Completes an active pointer drag.
+		* @param {MouseEvent|TouchEvent} e The pointer end event.
+		*/
+		#endDrag(e) {
+			if (!this.node || !this.#dragging) return;
+			const value = this.#getEventValue(e);
+			if (value !== null) this.setValue(value);
+			else this.#refresh();
+			this.#dragging = false;
+			this.#triggerTooltip("drag", false);
+			_fr0st_query.default.rect(this.#filledContainer);
+			_fr0st_query.default.setStyle(this.#filledContainer, { transition: "" });
+		}
+		/**
+		* Attaches input, keyboard, pointer, and hover events.
+		*/
+		#events() {
+			_fr0st_query.default.addEvent(this.node, "focus.ui.starrating", (_) => {
+				_fr0st_query.default.focus(this.#container);
+			});
+			_fr0st_query.default.addEvent(this.node, "change.ui.starrating", (e) => {
+				if (!e.skipUpdate) this.#refresh();
+			});
+			if (this.#displayOnly) return;
+			_fr0st_query.default.addEvent(this.#container, "keydown.ui.starrating", (e) => {
+				if (_fr0st_query.default.is(this.node, ":disabled")) return;
+				let value = this.getValue() ?? this.#min;
+				const step = this.#step ?? 1;
+				switch (e.code) {
+					case "ArrowLeft":
+						value += this.#rtl ? step : -step;
+						break;
+					case "ArrowDown":
+						value -= step;
+						break;
+					case "ArrowRight":
+						value += this.#rtl ? -step : step;
+						break;
+					case "ArrowUp":
+						value += step;
+						break;
+					case "End":
+						value = this.#max;
+						break;
+					case "Home":
+						value = this.#min;
+						break;
+					case "PageDown":
+						value--;
+						break;
+					case "PageUp":
+						value++;
+						break;
+					default: return;
+				}
+				e.preventDefault();
+				this.setValue(value);
+			});
+			const dragEvent = _fr0st_query.default.mouseDragFactory((e) => this.#startDrag(e), (e) => this.#moveDrag(e), (e) => this.#endDrag(e), {
+				debounce: false,
+				passive: false,
+				preventDefault: false
+			});
+			_fr0st_query.default.addEvent(this.#container, "mousedown.ui.starrating touchstart.ui.starrating", dragEvent);
+			if (this.options.hover) this.#hoverEvents();
+		}
+		/**
+		* Gets a normalized rating from a pointer event.
+		* @param {MouseEvent|TouchEvent} e The pointer event.
+		* @returns {number|null} The normalized rating, or `null` for invalid coordinates.
+		*/
+		#getEventValue(e) {
+			const { x } = (0, _fr0st_ui.getPosition)(e);
+			if (!Number.isFinite(x)) return null;
+			let percentX = _fr0st_query.default.percentX(this.#container, x, { offset: true });
+			if (!Number.isFinite(percentX)) return null;
+			if (this.#rtl) percentX = 100 - percentX;
+			return this.#normalizeValue(_fr0st_query.default._lerp(0, this.#stars, percentX / 100));
+		}
+		/**
+		* Gets the fill percentage for a rating.
+		* @param {number|null} value The rating.
+		* @returns {number} The fill percentage.
+		*/
+		#getPercent(value) {
+			value ??= this.#min;
+			return _fr0st_query.default._clamp(_fr0st_query.default._inverseLerp(0, this.#stars, value) * 100, 0, 100);
+		}
+		/**
+		* Attaches pointer preview events.
+		*/
+		#hoverEvents() {
+			_fr0st_query.default.addEvent(this.#container, "mousemove.ui.starrating", _fr0st_query.default.debounce((e) => {
+				if (!this.node || this.#dragging || _fr0st_query.default.is(this.node, ":disabled")) return;
+				const value = this.#getEventValue(e);
+				if (value === null) return;
+				_fr0st_query.default.setStyle(this.#filledContainer, { transition: "none" });
+				this.#setDisplayedValue(value, { updateAria: false });
+				_fr0st_query.default.rect(this.#filledContainer);
+				_fr0st_query.default.setStyle(this.#filledContainer, { transition: "" });
+			}), { passive: true });
+			_fr0st_query.default.addEvent(this.#container, "mouseleave.ui.starrating", (_) => {
+				if (!this.node || this.#dragging || _fr0st_query.default.is(this.node, ":disabled")) return;
+				this.#refresh();
+			});
+		}
+		/**
+		* Updates the rating during an active pointer drag.
+		* @param {MouseEvent|TouchEvent} e The pointer move event.
+		*/
+		#moveDrag(e) {
+			if (!this.node || !this.#dragging) return;
+			if (e.cancelable) e.preventDefault();
+			const value = this.#getEventValue(e);
+			if (value !== null) this.setValue(value);
+		}
+		/**
+		* Normalizes native attributes and component options without mutating options.
+		*/
+		#normalizeOptions() {
+			const configuredStars = StarRating.#parseNumber(this.options.stars, 5);
+			this.#stars = Math.max(1, Math.trunc(configuredStars));
+			const minAttribute = _fr0st_query.default.getAttribute(this.node, "min");
+			const optionMin = StarRating.#parseNumber(this.options.min, 0);
+			const configuredMin = minAttribute === null ? optionMin : StarRating.#parseNumber(minAttribute, optionMin);
+			this.#min = _fr0st_query.default._clamp(configuredMin, 0, this.#stars);
+			const maxAttribute = _fr0st_query.default.getAttribute(this.node, "max");
+			const optionMax = this.options.max === null ? this.#stars : StarRating.#parseNumber(this.options.max, this.#stars);
+			const configuredMax = maxAttribute === null ? optionMax : StarRating.#parseNumber(maxAttribute, optionMax);
+			this.#max = _fr0st_query.default._clamp(configuredMax, this.#min, this.#stars);
+			const stepAttribute = _fr0st_query.default.getAttribute(this.node, "step");
+			const configuredStep = stepAttribute === null ? this.options.step : stepAttribute;
+			if (`${configuredStep}`.trim().toLowerCase() === "any") this.#step = null;
+			else {
+				const step = StarRating.#parseNumber(configuredStep, NaN);
+				this.#step = Number.isFinite(step) && step > 0 ? step : null;
+			}
+			this.#precision = Math.max(StarRating.#getDecimalPlaces(this.#min), StarRating.#getDecimalPlaces(this.#max), this.#step === null ? 0 : StarRating.#getDecimalPlaces(this.#step));
+			this.#displayOnly = Boolean(this.options.displayOnly || _fr0st_query.default.getProperty(this.node, "readOnly"));
+		}
+		/**
+		* Clamps and snaps a rating to the effective range and step.
+		* @param {*} value The rating to normalize.
+		* @returns {number|null} The normalized rating, or `null` for invalid input.
+		*/
+		#normalizeValue(value) {
+			value = StarRating.#parseNumber(value, NaN);
+			if (!Number.isFinite(value)) return null;
+			value = _fr0st_query.default._clamp(value, this.#min, this.#max);
+			if (this.#step !== null && value !== this.#min && value !== this.#max) {
+				const steps = (value - this.#min) / this.#step;
+				const tolerance = Number.EPSILON * Math.max(1, Math.abs(steps));
+				value = this.#min + Math.ceil(steps - tolerance) * this.#step;
+			}
+			if (this.#step !== null && this.#precision <= 100) value = Number(value.toFixed(this.#precision));
+			return _fr0st_query.default._clamp(value, this.#min, this.#max);
+		}
+		/**
+		* Renders and normalizes the current input value.
+		*/
+		#refresh() {
+			const value = this.getValue();
+			const normalizedValue = value === null ? null : this.#normalizeValue(value);
+			if (normalizedValue !== null && normalizedValue !== value) _fr0st_query.default.setValue(this.node, normalizedValue);
+			this.#setDisplayedValue(normalizedValue);
+		}
+		/**
+		* Synchronizes disabled styling and focusability with the input.
+		*/
+		#refreshDisabled() {
+			const disabled = _fr0st_query.default.is(this.node, ":disabled");
+			if (disabled) _fr0st_query.default.addClass(this.#container, this.constructor.classes.disabled);
+			else _fr0st_query.default.removeClass(this.#container, this.constructor.classes.disabled);
+			_fr0st_query.default.setAttribute(this.#container, {
+				"aria-disabled": disabled,
+				"tabindex": disabled ? -1 : 0
+			});
+		}
+		/**
+		* Renders the StarRating and records input and label attributes for disposal.
+		*/
+		#render() {
+			this.#hidden = _fr0st_query.default.hasClass(this.node, this.constructor.classes.hide);
+			this.#tabIndex = _fr0st_query.default.getAttribute(this.node, "tabindex");
+			const labelledBy = /* @__PURE__ */ new Set();
+			const inputLabelledBy = _fr0st_query.default.getAttribute(this.node, "aria-labelledby");
+			if (inputLabelledBy) {
+				for (const id of inputLabelledBy.split(/\s+/)) if (id) labelledBy.add(id);
+			}
+			for (const label of this.node.labels || []) {
+				let id = _fr0st_query.default.getAttribute(label, "id");
+				if (!id) {
+					id = (0, _fr0st_ui.generateId)("starrating-label");
+					_fr0st_query.default.setAttribute(label, { id });
+					this.#generatedLabelIds.set(label, id);
+				}
+				labelledBy.add(id);
+			}
+			const attributes = {
+				"role": "slider",
+				"aria-valuemin": this.#min,
+				"aria-valuemax": this.#max,
+				"aria-valuenow": "",
+				"aria-valuetext": "",
+				"aria-required": Boolean(_fr0st_query.default.getProperty(this.node, "required")),
+				"aria-readonly": this.#displayOnly
+			};
+			const ariaLabel = _fr0st_query.default.getAttribute(this.node, "aria-label");
+			const direction = _fr0st_query.default.getAttribute(this.node, "dir");
+			if (labelledBy.size) attributes["aria-labelledby"] = Array.from(labelledBy).join(" ");
+			else if (ariaLabel) attributes["aria-label"] = ariaLabel;
+			if (direction) attributes.dir = direction;
+			this.#outerContainer = _fr0st_query.default.create("div");
+			if (this.options.animate) _fr0st_query.default.addClass(this.#outerContainer, this.constructor.classes.animate);
+			this.#container = _fr0st_query.default.create("div", {
+				class: [this.constructor.classes.container, `starrating-${this.options.size}`],
+				attributes
+			});
+			const outline = [];
+			const filled = [];
+			for (let i = 0; i < this.#stars; i++) {
+				outline.push(this.constructor.icons.outline);
+				filled.push(this.constructor.icons.filled);
+			}
+			const outlineContainer = _fr0st_query.default.create("div", {
+				class: this.constructor.classes.outline,
+				html: outline.join("")
+			});
+			this.#filledContainer = _fr0st_query.default.create("div", {
+				class: this.constructor.classes.filled,
+				html: filled.join("")
+			});
+			_fr0st_query.default.append(this.#container, outlineContainer);
+			_fr0st_query.default.append(this.#container, this.#filledContainer);
+			_fr0st_query.default.append(this.#outerContainer, this.#container);
+			_fr0st_query.default.addClass(this.node, this.constructor.classes.hide);
+			_fr0st_query.default.setAttribute(this.node, { tabindex: -1 });
+			_fr0st_query.default.before(this.node, this.#outerContainer);
+			this.#rtl = _fr0st_query.default.css(this.#container, "direction") === "rtl";
+			if (this.options.tooltip) this.#tooltip = _fr0st_ui.Tooltip.init(this.#container, {
+				appendTo: "body",
+				placement: "top",
+				trigger: ""
+			});
+		}
+		/**
+		* Updates the rendered fill and accessible rating text.
+		* @param {number|null} value The rating to render.
+		* @param {object} [options] The update options.
+		* @param {boolean} [options.updateAria=true] Whether to update slider ARIA values.
+		* @param {boolean} [options.updateTooltip=true] Whether to update the tooltip text.
+		*/
+		#setDisplayedValue(value, { updateAria = true, updateTooltip = true } = {}) {
+			_fr0st_query.default.setStyle(this.#filledContainer, { width: `${this.#getPercent(value)}%` });
+			value ??= this.#min;
+			const ratingText = this.options.ratingText.call(this, value);
+			if (updateAria) _fr0st_query.default.setAttribute(this.#container, {
+				"aria-valuenow": value,
+				"aria-valuetext": ratingText
+			});
+			if (updateTooltip && this.#tooltip) {
+				_fr0st_query.default.setDataset(this.#container, { uiTitle: ratingText });
+				this.#tooltip.refresh();
+				this.#tooltip.update();
+			}
+		}
+		/**
+		* Starts a mouse or touch drag and sets the rating at the pointer position.
+		* @param {MouseEvent|TouchEvent} e The pointer down event.
+		* @returns {boolean|undefined} `false` when the drag must not start.
+		*/
+		#startDrag(e) {
+			if (!this.node || e.type === "mousedown" && e.button !== 0 || _fr0st_query.default.is(this.node, ":disabled")) return false;
+			const value = this.#getEventValue(e);
+			if (value === null) return false;
+			this.#dragging = true;
+			_fr0st_query.default.focus(this.#container);
+			_fr0st_query.default.setStyle(this.#filledContainer, { transition: "none" });
+			this.setValue(value);
+			this.#triggerTooltip("drag");
+		}
+		/**
+		* Attaches hover and focus tooltip events.
+		*/
+		#tooltipEvents() {
+			_fr0st_query.default.addEvent(this.#container, "mouseenter.ui.starrating", (_) => {
+				this.#triggerTooltip("hover");
+			});
+			_fr0st_query.default.addEvent(this.#container, "mouseleave.ui.starrating", (_) => {
+				this.#triggerTooltip("hover", false);
+			});
+			_fr0st_query.default.addEvent(this.#container, "focus.ui.starrating", (_) => {
+				this.#triggerTooltip("focus");
+			});
+			_fr0st_query.default.addEvent(this.#container, "blur.ui.starrating", (_) => {
+				this.#triggerTooltip("focus", false);
+			});
+		}
+		/**
+		* Shows or hides the tooltip for one interaction source.
+		* @param {string} type The interaction source.
+		* @param {boolean} [show=true] Whether the source is active.
+		*/
+		#triggerTooltip(type, show = true) {
+			if (!this.#tooltip) return;
+			if (show) {
+				if (!this.#tooltipTriggers.size) this.#tooltip.show();
+				this.#tooltipTriggers.add(type);
+				return;
+			}
+			this.#tooltipTriggers.delete(type);
+			if (!this.#tooltipTriggers.size) this.#tooltip.hide();
 		}
 	};
 
 //#endregion
-//#region src/js/prototype/events.js
-/**
-	* Attach events for the StarRating.
-	*/
-	function _events() {
-		_fr0st_query.default.addEvent(this._node, "focus.ui.starrating", (_) => {
-			_fr0st_query.default.focus(this._container);
-		});
-		const downEvent = (e) => {
-			if (e.button || _fr0st_query.default.is(this._node, ":disabled")) return false;
-			_fr0st_query.default.setStyle(this._filledContainer, { transition: "none" });
-			const pos = (0, _fr0st_ui.getPosition)(e);
-			const percentX = _fr0st_query.default.percentX(this._container, pos.x, { offset: true });
-			const value = this._getValue(percentX);
-			this.setValue(value);
-			_fr0st_query.default.setDataset(this._container, { uiDragging: true });
-			if (this._options.tooltip) this._triggerTooltip("drag");
-		};
-		const moveEvent = (e) => {
-			const pos = (0, _fr0st_ui.getPosition)(e);
-			const percentX = _fr0st_query.default.percentX(this._container, pos.x, { offset: true });
-			const value = this._getValue(percentX);
-			this.setValue(value);
-		};
-		const upEvent = (e) => {
-			_fr0st_query.default.removeDataset(this._container, "uiDragging");
-			if (this._options.tooltip) this._triggerTooltip("drag", false);
-			const pos = (0, _fr0st_ui.getPosition)(e);
-			const percentX = _fr0st_query.default.percentX(this._container, pos.x, { offset: true });
-			const value = this._getValue(percentX);
-			if (value === this.getValue()) this._updateValue(value);
-			else this.setValue(value);
-			_fr0st_query.default.rect(this._filledContainer);
-			_fr0st_query.default.setStyle(this._filledContainer, { transition: "" });
-		};
-		const dragEvent = _fr0st_query.default.mouseDragFactory(downEvent, moveEvent, upEvent, { preventDefault: false });
-		_fr0st_query.default.addEvent(this._container, "mousedown.ui.starrating touchstart.ui.starrating", dragEvent);
-		_fr0st_query.default.addEvent(this._container, "keydown.ui.starrating", (e) => {
-			let value = this.getValue();
-			if (value === null) value = this._options.min;
-			switch (e.code) {
-				case "ArrowLeft":
-				case "ArrowDown":
-					value -= this._options.step;
-					break;
-				case "ArrowRight":
-				case "ArrowUp":
-					value += this._options.step;
-					break;
-				case "End":
-					value = this._options.max;
-					break;
-				case "Home":
-					value = this._options.min;
-					break;
-				case "PageDown":
-					value--;
-					break;
-				case "PageUp":
-					value++;
-					break;
-				default: return;
-			}
-			this.setValue(value);
-		});
-		if (this._options.hover) this._hoverEvents();
-	}
-	/**
-	* Attach hover events for the StarRating.
-	*/
-	function _hoverEvents() {
-		_fr0st_query.default.addEvent(this._container, "mousemove.ui.starrating", _fr0st_query.default.debounce((e) => {
-			if (_fr0st_query.default.is(this._node, ":disabled") || _fr0st_query.default.getDataset(this._container, "uiDragging")) return;
-			const percentX = _fr0st_query.default.percentX(this._container, e.pageX, { offset: true });
-			const value = this._getValue(percentX);
-			const percent = this._getPercent(value);
-			_fr0st_query.default.setStyle(this._filledContainer, { transition: "none" });
-			_fr0st_query.default.setStyle(this._filledContainer, { width: `${percent}%` });
-			_fr0st_query.default.rect(this._filledContainer);
-			_fr0st_query.default.setStyle(this._filledContainer, { transition: "" });
-			this._updateValue(value, { updateAria: false });
-		}), { passive: true });
-		_fr0st_query.default.addEvent(this._container, "mouseleave.ui.starrating", (_) => {
-			if (_fr0st_query.default.is(this._node, ":disabled") || _fr0st_query.default.getDataset(this._container, "uiDragging")) return;
-			this._refresh();
-		});
-	}
-	/**
-	* Attach events for the StarRating tooltip.
-	*/
-	function _tooltipEvents() {
-		const tooltipTriggers = {};
-		this._triggerTooltip = _fr0st_query.default._debounce((type, show = true) => {
-			if (show) {
-				if (!Object.keys(tooltipTriggers).length) {
-					this._tooltip._stop();
-					this._tooltip.show();
-				}
-				tooltipTriggers[type] = true;
-			} else {
-				delete tooltipTriggers[type];
-				if (!Object.keys(tooltipTriggers).length) {
-					this._tooltip._stop();
-					this._tooltip.hide();
-				}
-			}
-		});
-		_fr0st_query.default.addEvent(this._container, "mouseenter.ui.starrating", (e) => {
-			if (!_fr0st_query.default.isSame(e.target, this._container)) return;
-			this._triggerTooltip("hover");
-		});
-		_fr0st_query.default.addEvent(this._container, "mouseleave.ui.starrating", (e) => {
-			if (!_fr0st_query.default.isSame(e.target, this._container)) return;
-			this._triggerTooltip("hover", false);
-		});
-	}
-
-//#endregion
-//#region src/js/prototype/helpers.js
-/**
-	* Clamp a value to a step-size, and between a min and max value.
-	* @param {number} value The value to clamp.
-	* @return {number} The clamped value.
-	*/
-	function _clampValue(value) {
-		if (this._options.step) {
-			value /= this._options.step;
-			value = value < 1 ? Math.round(value) : Math.ceil(value);
-			value *= this._options.step;
-			value = value.toFixed(this._stepLength);
-		}
-		return _fr0st_query.default._clamp(value, this._options.min, this._options.max);
-	}
-	/**
-	* Get the percent from a value.
-	* @param {number} value The value.
-	* @return {number} The percent.
-	*/
-	function _getPercent(value) {
-		return _fr0st_query.default._inverseLerp(0, this._options.stars, value) * 100;
-	}
-	/**
-	* Get the value from an X percent.
-	* @param {number} percentX The X percent.
-	* @return {number} The value.
-	*/
-	function _getValue(percentX) {
-		const value = _fr0st_query.default._lerp(0, this._options.stars, percentX / 100);
-		return this._clampValue(value);
-	}
-	/**
-	* Refresh the star rating.
-	*/
-	function _refresh() {
-		const value = this.getValue();
-		const percent = this._getPercent(value);
-		_fr0st_query.default.setStyle(this._filledContainer, { width: `${percent}%` });
-		this._updateValue(value);
-	}
-	/**
-	* Refresh the disabled styling.
-	*/
-	function _refreshDisabled() {
-		const disabled = _fr0st_query.default.is(this._node, ":disabled");
-		if (disabled) _fr0st_query.default.addClass(this._container, this.constructor.classes.disabled);
-		else _fr0st_query.default.removeClass(this._container, this.constructor.classes.disabled);
-		_fr0st_query.default.setAttribute(this._container, {
-			"aria-disabled": disabled,
-			"tabindex": disabled ? -1 : 0
-		});
-	}
-	/**
-	* Update the value.
-	* @param {number} value The value.
-	* @param {object} [options] The options for updating the value.
-	*/
-	function _updateValue(value, { updateAria = true, updateTooltip = true } = {}) {
-		if (value === null) value = this._options.min;
-		const ratingText = this._options.ratingText.bind(this)(value);
-		if (updateAria) _fr0st_query.default.setAttribute(this._container, {
-			"aria-valuenow": value,
-			"aria-valuetext": ratingText
-		});
-		if (updateTooltip && this._tooltip) {
-			_fr0st_query.default.setDataset(this._container, { uiTitle: ratingText });
-			this._tooltip.refresh();
-			this._tooltip.update();
-		}
-	}
-
-//#endregion
-//#region src/js/prototype/render.js
-/**
-	* Render the star rating.
-	*/
-	function _render() {
-		this._outerContainer = _fr0st_query.default.create("div");
-		if (this._options.animate) _fr0st_query.default.addClass(this._outerContainer, this.constructor.classes.animate);
-		this._container = _fr0st_query.default.create("div", {
-			class: [this.constructor.classes.container, `starrating-${this._options.size}`],
-			attributes: {
-				"role": "slider",
-				"aria-valuemin": this._options.min,
-				"aria-valuemax": this._options.max,
-				"aria-valuenow": "",
-				"aria-valuetext": "",
-				"aria-required": _fr0st_query.default.getProperty(this._node, "required")
-			}
-		});
-		if (this._label) {
-			const labelId = _fr0st_query.default.getAttribute(this._label, "id");
-			_fr0st_query.default.setAttribute(this._container, { "aria-labelledby": labelId });
-		}
-		const outline = [];
-		const filled = [];
-		for (let i = 0; i < this._options.stars; i++) {
-			outline.push(this.constructor.icons.outline);
-			filled.push(this.constructor.icons.filled);
-		}
-		const outlineContainer = _fr0st_query.default.create("div", {
-			class: this.constructor.classes.outline,
-			html: outline.join("")
-		});
-		this._filledContainer = _fr0st_query.default.create("div", {
-			class: this.constructor.classes.filled,
-			html: filled.join("")
-		});
-		_fr0st_query.default.append(this._container, outlineContainer);
-		_fr0st_query.default.append(this._container, this._filledContainer);
-		_fr0st_query.default.append(this._outerContainer, this._container);
-		_fr0st_query.default.addClass(this._node, this.constructor.classes.hide);
-		_fr0st_query.default.setAttribute(this._node, { tabindex: -1 });
-		_fr0st_query.default.before(this._node, this._outerContainer);
-		if (this._options.tooltip) this._tooltip = _fr0st_ui.Tooltip.init(this._container, {
-			appendTo: "body",
-			trigger: "",
-			placement: "top"
-		});
-	}
-
-//#endregion
 //#region src/js/index.js
+/** @import { StarRatingOptions } from './star-rating.js'; */
+	/** @type {StarRatingOptions} */
 	StarRating.defaults = {
 		size: "md",
 		min: 0,
@@ -394,17 +509,6 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 		star: "star",
 		stars: "stars"
 	};
-	var proto = StarRating.prototype;
-	proto._clampValue = _clampValue;
-	proto._events = _events;
-	proto._getPercent = _getPercent;
-	proto._getValue = _getValue;
-	proto._hoverEvents = _hoverEvents;
-	proto._refresh = _refresh;
-	proto._refreshDisabled = _refreshDisabled;
-	proto._render = _render;
-	proto._tooltipEvents = _tooltipEvents;
-	proto._updateValue = _updateValue;
 	(0, _fr0st_ui.initComponent)("starrating", StarRating);
 	var js_default = StarRating;
 

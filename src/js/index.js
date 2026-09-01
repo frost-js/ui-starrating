@@ -1,10 +1,10 @@
+/** @import { StarRatingOptions } from './star-rating.js'; */
+
 import { initComponent } from '@fr0st/ui';
 import StarRating from './star-rating.js';
-import { _events, _hoverEvents, _tooltipEvents } from './prototype/events.js';
-import { _clampValue, _getPercent, _getValue, _refresh, _refreshDisabled, _updateValue } from './prototype/helpers.js';
-import { _render } from './prototype/render.js';
 
 // StarRating default options
+/** @type {StarRatingOptions} */
 StarRating.defaults = {
     size: 'md',
     min: 0,
@@ -43,20 +43,6 @@ StarRating.lang = {
     star: 'star',
     stars: 'stars',
 };
-
-// StarRating prototype
-const proto = StarRating.prototype;
-
-proto._clampValue = _clampValue;
-proto._events = _events;
-proto._getPercent = _getPercent;
-proto._getValue = _getValue;
-proto._hoverEvents = _hoverEvents;
-proto._refresh = _refresh;
-proto._refreshDisabled = _refreshDisabled;
-proto._render = _render;
-proto._tooltipEvents = _tooltipEvents;
-proto._updateValue = _updateValue;
 
 // StarRating init
 initComponent('starrating', StarRating);

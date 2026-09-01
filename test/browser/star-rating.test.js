@@ -17,7 +17,7 @@ test.describe('StarRating', () => {
     });
 
     test.describe('#init', () => {
-        test('creates a StarRating directly', async ({ page }) => {
+        test('creates a StarRating', async ({ page }) => {
             expect(await page.evaluate((_) =>
                 UI.StarRating.init(
                     $.findOne('#rating'),
@@ -25,20 +25,23 @@ test.describe('StarRating', () => {
                 ) instanceof UI.StarRating)).toBe(true);
         });
 
-        test('creates a StarRating through fQuery', async ({ page }) => {
+        test('creates a StarRating (query)', async ({ page }) => {
             expect(await page.evaluate((_) =>
                 $('#rating').starrating({ tooltip: false }) instanceof UI.StarRating)).toBe(true);
         });
 
-        test('creates multiple StarRatings and returns the first instance', async ({ page }) => {
+        test('creates multiple StarRatings (query)', async ({ page }) => {
+            await page.evaluate((_) => {
+                $('input').starrating({ tooltip: false });
+            });
+            await expect(page.locator('.starrating')).toHaveCount(2);
+        });
+
+        test('returns the first StarRating (query)', async ({ page }) => {
             expect(await page.evaluate((_) => {
                 const first = $('input').starrating({ tooltip: false });
-                return first === $.getData('#rating', 'starrating') &&
-                    ['#rating', '#rating2'].every((selector) =>
-                        $.getData(selector, 'starrating') instanceof UI.StarRating);
+                return first === $.getData('#rating', 'starrating');
             })).toBe(true);
-
-            await expect(page.locator('.starrating')).toHaveCount(2);
         });
 
         test('reuses an existing instance and its resolved options', async ({ page }) => {
@@ -131,7 +134,272 @@ test.describe('StarRating', () => {
         });
     });
 
-    test.describe('rendering', () => {
+    test.describe('#dispose', () => {
+        test('removes the StarRating and restores the original input', async ({ page }) => {
+            await page.evaluate((_) => {
+                $.setHTML(
+                    document.body,
+                    '<input class="existing" id="rating" tabindex="4" type="number">',
+                );
+                const input = $.findOne('#rating');
+                const component = UI.StarRating.init(input, { tooltip: false });
+                $.addClass(input, 'runtime');
+                component.dispose();
+                window.disposedNode = component.node;
+                window.disposedOptions = component.options;
+            });
+
+            const input = page.locator('#rating');
+            await expect(input).toHaveClass('existing runtime');
+            await expect(input).toHaveAttribute('tabindex', '4');
+            await expect(page.locator('.starrating')).toHaveCount(0);
+            expect(await page.evaluate((_) => $.hasData('#rating', 'starrating'))).toBe(false);
+            expect(await page.evaluate((_) => window.disposedNode)).toBeNull();
+            expect(await page.evaluate((_) => window.disposedOptions)).toBeNull();
+        });
+
+        test('restores existing hidden and absent tabindex state', async ({ page }) => {
+            await page.evaluate((_) => {
+                $.setHTML(
+                    document.body,
+                    '<input class="visually-hidden existing" id="rating" type="number">',
+                );
+                UI.StarRating.init($.findOne('#rating'), { tooltip: false }).dispose();
+            });
+
+            const input = page.locator('#rating');
+            await expect(input).toHaveClass('visually-hidden existing');
+            await expect(input).not.toHaveAttribute('tabindex');
+            await expect(page.locator('.starrating')).toHaveCount(0);
+        });
+
+        test('restores owned label IDs without removing runtime IDs', async ({ page }) => {
+            await page.evaluate((_) => {
+                $.setHTML(
+                    document.body,
+                    '<label>Generated <input id="rating" type="number"></label><label id="existing" for="rating">Existing</label>',
+                );
+                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+            });
+
+            const labels = page.locator('label');
+            await expect(labels.first()).toHaveAttribute('id', /^starrating-label/);
+            await expect(labels.nth(1)).toHaveAttribute('id', 'existing');
+
+            await page.evaluate((_) => {
+                const input = $.findOne('#rating');
+                input.labels[0].id = 'runtime-label';
+                $.getData(input, 'starrating').dispose();
+            });
+            await expect(labels.first()).toHaveAttribute('id', 'runtime-label');
+
+            await page.evaluate((_) => {
+                const input = $.findOne('#rating');
+                input.labels[0].removeAttribute('id');
+                UI.StarRating.init(input, { tooltip: false });
+            });
+            await expect(labels.first()).toHaveAttribute('id', /^starrating-label/);
+
+            await page.evaluate((_) => {
+                $.getData('#rating', 'starrating').dispose();
+            });
+            await expect(labels.first()).not.toHaveAttribute('id');
+            await expect(labels.nth(1)).toHaveAttribute('id', 'existing');
+        });
+
+        test('removes the StarRating (query)', async ({ page }) => {
+            await page.evaluate((_) => {
+                $('#rating').starrating({ tooltip: false });
+                $('#rating').starrating('dispose');
+            });
+
+            await expect(page.locator('.starrating')).toHaveCount(0);
+            expect(await page.evaluate((_) => $.hasData('#rating', 'starrating'))).toBe(false);
+        });
+
+        test('can reinitialize after disposal', async ({ page }) => {
+            expect(await page.evaluate((_) => {
+                const input = $.findOne('#rating');
+                const first = UI.StarRating.init(input, { tooltip: false });
+                first.dispose();
+                const second = UI.StarRating.init(input, {
+                    stars: 3,
+                    tooltip: false,
+                });
+                return first !== second;
+            })).toBe(true);
+
+            await expect(page.locator('.starrating')).toHaveCount(1);
+            await expect(page.locator('.starrating-outline > svg')).toHaveCount(3);
+        });
+
+        test('disposes automatically when the original input is removed', async ({ page }) => {
+            await page.evaluate((_) => {
+                const input = $.findOne('#rating');
+                window.removedComponent = UI.StarRating.init(input, { tooltip: false });
+                $.remove(input);
+            });
+
+            await expect(page.locator('#rating')).toHaveCount(0);
+            await expect(page.locator('.starrating')).toHaveCount(0);
+            expect(await page.evaluate((_) => window.removedComponent.node)).toBeNull();
+            expect(await page.evaluate((_) => window.removedComponent.options)).toBeNull();
+        });
+
+        test('cleans up an active drag and visible tooltip safely', async ({ page }) => {
+            await page.evaluate((_) => {
+                const input = $.findOne('#rating');
+                const component = UI.StarRating.init(input);
+                const slider = $.findOne('.starrating');
+                const rect = slider.getBoundingClientRect();
+                window.disposalErrors = 0;
+                window.addEventListener('error', (_) => window.disposalErrors++);
+                $.focus(slider);
+                slider.dispatchEvent(new MouseEvent('mousedown', {
+                    bubbles: true,
+                    button: 0,
+                    clientX: rect.left + (rect.width / 2),
+                }));
+                component.dispose();
+                window.dispatchEvent(new MouseEvent('mousemove', {
+                    clientX: rect.right,
+                }));
+                window.dispatchEvent(new MouseEvent('mouseup', {
+                    clientX: rect.right,
+                }));
+                window.dragDisposedComponent = component;
+            });
+
+            await expect(page.locator('.starrating')).toHaveCount(0);
+            await expect(page.locator('.tooltip')).toHaveCount(0);
+            expect(await page.evaluate((_) => window.disposalErrors)).toBe(0);
+            expect(await page.evaluate((_) => window.dragDisposedComponent.node)).toBeNull();
+        });
+    });
+
+    test.describe('#disable', () => {
+        test('disables the StarRating', async ({ page }) => {
+            await page.evaluate((_) => {
+                UI.StarRating.init($.findOne('#rating'), { tooltip: false }).disable();
+            });
+
+            const slider = page.locator('.starrating');
+            await expect(page.locator('#rating')).toBeDisabled();
+            await expect(slider).toHaveClass(/starrating-disabled/);
+            await expect(slider).toHaveAttribute('aria-disabled', 'true');
+            await expect(slider).toHaveAttribute('tabindex', '-1');
+        });
+
+        test('disables the StarRating (query)', async ({ page }) => {
+            await page.evaluate((_) => {
+                $('#rating').starrating({ tooltip: false });
+                $('#rating').starrating('disable');
+            });
+
+            await expect(page.locator('#rating')).toBeDisabled();
+            await expect(page.locator('.starrating')).toHaveAttribute('aria-disabled', 'true');
+        });
+    });
+
+    test.describe('#enable', () => {
+        test('enables the StarRating', async ({ page }) => {
+            await page.evaluate((_) => {
+                const input = $.findOne('#rating');
+                $.setAttribute(input, { disabled: true });
+                UI.StarRating.init(input, { tooltip: false }).enable();
+            });
+
+            const slider = page.locator('.starrating');
+            await expect(page.locator('#rating')).toBeEnabled();
+            await expect(slider).not.toHaveClass(/starrating-disabled/);
+            await expect(slider).toHaveAttribute('aria-disabled', 'false');
+            await expect(slider).toHaveAttribute('tabindex', '0');
+        });
+
+        test('enables the StarRating (query)', async ({ page }) => {
+            await page.evaluate((_) => {
+                $.setAttribute('#rating', { disabled: true });
+                $('#rating').starrating({ tooltip: false });
+                $('#rating').starrating('enable');
+            });
+
+            await expect(page.locator('#rating')).toBeEnabled();
+            await expect(page.locator('.starrating')).toHaveAttribute('aria-disabled', 'false');
+        });
+    });
+
+    test.describe('#getValue', () => {
+        test('gets an empty value', async ({ page }) => {
+            expect(await page.evaluate((_) =>
+                UI.StarRating.init(
+                    $.findOne('#rating'),
+                    { tooltip: false },
+                ).getValue())).toBeNull();
+        });
+
+        test('gets the initial value', async ({ page }) => {
+            expect(await page.evaluate((_) => {
+                $.setValue('#rating', 3);
+                return UI.StarRating.init(
+                    $.findOne('#rating'),
+                    { tooltip: false },
+                ).getValue();
+            })).toBe(3);
+        });
+
+        test('gets the value (query)', async ({ page }) => {
+            expect(await page.evaluate((_) => {
+                $.setValue('#rating', 3);
+                $('#rating').starrating({ tooltip: false });
+                return $('#rating').starrating('getValue');
+            })).toBe(3);
+        });
+    });
+
+    test.describe('#setValue', () => {
+        test('sets the value', async ({ page }) => {
+            await page.evaluate((_) => {
+                UI.StarRating.init(
+                    $.findOne('#rating'),
+                    { tooltip: false },
+                ).setValue(3);
+            });
+
+            await expect(page.locator('#rating')).toHaveValue('3');
+            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '3');
+        });
+
+        test('sets the value (query)', async ({ page }) => {
+            await page.evaluate((_) => {
+                $('#rating').starrating({ tooltip: false });
+                $('#rating').starrating('setValue', 3);
+            });
+
+            await expect(page.locator('#rating')).toHaveValue('3');
+            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '3');
+        });
+
+        test('ignores invalid and non-finite values', async ({ page }) => {
+            await page.evaluate((_) => {
+                const component = UI.StarRating.init(
+                    $.findOne('#rating'),
+                    { tooltip: false },
+                );
+                component.setValue(2);
+                component.setValue('invalid');
+                component.setValue(Number.POSITIVE_INFINITY);
+                component.setValue(null);
+            });
+
+            await expect(page.locator('#rating')).toHaveValue('2');
+            await expect(page.locator('.starrating-filled')).not.toHaveAttribute(
+                'style',
+                /NaN|Infinity/,
+            );
+        });
+    });
+
+    test.describe('input attributes', () => {
         test('renders the component structure and hides the input', async ({ page }) => {
             await page.evaluate((_) => {
                 UI.StarRating.init($.findOne('#rating'), { tooltip: false });
@@ -227,45 +495,6 @@ test.describe('StarRating', () => {
             await expect(page.locator('#rating')).toHaveValue('1.234');
         });
 
-        test('renders every size and preserves the public size custom property', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setHTML(
-                    document.body,
-                    ['xs', 'sm', 'md', 'lg', 'xl']
-                        .map((size) => `<input id="${size}" type="number">`)
-                        .join(''),
-                );
-                for (const size of ['xs', 'sm', 'md', 'lg', 'xl']) {
-                    UI.StarRating.init($.findOne(`#${size}`), {
-                        size,
-                        tooltip: false,
-                    });
-                }
-            });
-
-            const sliders = page.locator('.starrating');
-            await expect(sliders).toHaveCount(5);
-            for (const [index, size] of ['xs', 'sm', 'md', 'lg', 'xl'].entries()) {
-                await expect(sliders.nth(index)).toHaveClass(`starrating starrating-${size}`);
-            }
-            await expect(sliders.first()).toHaveCSS('font-size', '16px');
-            expect(await sliders.last().evaluate((node) =>
-                Number.parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThan(16);
-        });
-
-        test('renders a normalized custom star count', async ({ page }) => {
-            await page.evaluate((_) => {
-                UI.StarRating.init($.findOne('#rating'), {
-                    stars: 7.9,
-                    tooltip: false,
-                });
-            });
-
-            await expect(page.locator('.starrating-outline > svg')).toHaveCount(7);
-            await expect(page.locator('.starrating-filled > svg')).toHaveCount(7);
-            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuemax', '7');
-        });
-
         test('inherits an explicit aria-label when no labels exist', async ({ page }) => {
             await page.evaluate((_) => {
                 $.setAttribute('#rating', { 'aria-label': 'Product rating' });
@@ -325,109 +554,7 @@ test.describe('StarRating', () => {
         });
     });
 
-    test.describe('public methods', () => {
-        test('gets empty and initial values', async ({ page }) => {
-            await page.evaluate((_) => {
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
-                $.setValue('#rating2', 3);
-                UI.StarRating.init($.findOne('#rating2'), { tooltip: false });
-            });
-
-            expect(await page.evaluate((_) =>
-                $.getData('#rating', 'starrating').getValue())).toBeNull();
-            expect(await page.evaluate((_) =>
-                $.getData('#rating2', 'starrating').getValue())).toBe(3);
-        });
-
-        test('clamps and anchors stepped values to the effective minimum', async ({ page }) => {
-            await page.evaluate((_) => {
-                UI.StarRating.init($.findOne('#rating'), {
-                    max: 1.1,
-                    min: .1,
-                    step: .2,
-                    tooltip: false,
-                }).setValue(.2);
-            });
-            await expect(page.locator('#rating')).toHaveValue('0.3');
-            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '0.3');
-
-            await page.evaluate((_) => {
-                $.getData('#rating', 'starrating').setValue(-10);
-            });
-            await expect(page.locator('#rating')).toHaveValue('0.1');
-
-            await page.evaluate((_) => {
-                $.getData('#rating', 'starrating').setValue(10);
-            });
-            await expect(page.locator('#rating')).toHaveValue('1.1');
-        });
-
-        test('handles decimal exponent precision', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setAttribute('#rating', {
-                    min: '1e-7',
-                    step: '2e-7',
-                });
-                UI.StarRating.init($.findOne('#rating'), {
-                    max: .00001,
-                    tooltip: false,
-                }).setValue(2e-7);
-            });
-
-            await expect(page.locator('#rating')).toHaveValue('3e-7');
-            await expect(page.locator('.starrating')).toHaveAttribute(
-                'aria-valuenow',
-                '3e-7',
-            );
-        });
-
-        test('preserves unrestricted fractional values for step any', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setAttribute('#rating', { step: 'any' });
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false })
-                    .setValue(.4444);
-            });
-
-            await expect(page.locator('#rating')).toHaveValue('0.4444');
-            await expect(page.locator('.starrating')).toHaveAttribute(
-                'aria-valuenow',
-                '0.4444',
-            );
-        });
-
-        test('ignores invalid and non-finite programmatic values', async ({ page }) => {
-            await page.evaluate((_) => {
-                const component = UI.StarRating.init(
-                    $.findOne('#rating'),
-                    { tooltip: false },
-                );
-                component.setValue(2);
-                component.setValue('invalid');
-                component.setValue(Number.POSITIVE_INFINITY);
-                component.setValue(null);
-            });
-
-            await expect(page.locator('#rating')).toHaveValue('2');
-            await expect(page.locator('.starrating')).not.toHaveAttribute('style', /NaN|Infinity/);
-        });
-
-        test('normalizes invalid component configuration safely', async ({ page }) => {
-            await page.evaluate((_) => {
-                UI.StarRating.init($.findOne('#rating'), {
-                    max: Number.NaN,
-                    min: Number.POSITIVE_INFINITY,
-                    stars: Number.NaN,
-                    step: -1,
-                    tooltip: false,
-                }).setValue(.375);
-            });
-
-            await expect(page.locator('.starrating-outline > svg')).toHaveCount(5);
-            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuemin', '0');
-            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuemax', '5');
-            await expect(page.locator('#rating')).toHaveValue('0.375');
-        });
-
+    test.describe('events', () => {
         test('normalizes external input changes without emitting another change', async ({ page }) => {
             await page.evaluate((_) => {
                 const input = $.findOne('#rating');
@@ -447,30 +574,33 @@ test.describe('StarRating', () => {
             expect(await page.evaluate((_) => window.changeCount)).toBe(1);
         });
 
-        test('dispatches value, enable, and disable methods through fQuery', async ({ page }) => {
+        test('emits one namespaced change for each distinct normalized value', async ({ page }) => {
             await page.evaluate((_) => {
-                $('#rating').starrating({ tooltip: false });
-                $('#rating').starrating('setValue', 3);
+                const input = $.findOne('#rating');
+                const component = UI.StarRating.init(input, { tooltip: false });
+                window.changeCount = 0;
+                window.lastChangeNamespace = null;
+                window.lastChangeSkipUpdate = null;
+                $.addEvent(input, 'change.ui.starrating', (event) => {
+                    window.changeCount++;
+                    window.lastChangeNamespace = event.namespace;
+                    window.lastChangeSkipUpdate = event.skipUpdate;
+                });
+                component.setValue(2);
+                component.setValue(2);
+                component.setValue(2.1);
+                component.setValue(3);
+                component.setValue(Number.NaN);
             });
+
             await expect(page.locator('#rating')).toHaveValue('3');
-            expect(await page.evaluate((_) =>
-                $('#rating').starrating('getValue'))).toBe(3);
-
-            await page.evaluate((_) => {
-                $('#rating').starrating('disable');
-            });
-            await expect(page.locator('#rating')).toBeDisabled();
-            await expect(page.locator('.starrating')).toHaveAttribute('tabindex', '-1');
-
-            await page.evaluate((_) => {
-                $('#rating').starrating('enable');
-            });
-            await expect(page.locator('#rating')).toBeEnabled();
-            await expect(page.locator('.starrating')).toHaveAttribute('tabindex', '0');
+            expect(await page.evaluate((_) => window.changeCount)).toBe(2);
+            expect(await page.evaluate((_) => window.lastChangeNamespace)).toBe('ui.starrating');
+            expect(await page.evaluate((_) => window.lastChangeSkipUpdate)).toBe(true);
         });
     });
 
-    test.describe('events and interaction', () => {
+    test.describe('user events', () => {
         test('sets a value with a primary mouse click', async ({ page }) => {
             await page.evaluate((_) => {
                 UI.StarRating.init($.findOne('#rating'), { tooltip: false });
@@ -562,49 +692,6 @@ test.describe('StarRating', () => {
             await expect(page.locator('.starrating-filled')).not.toHaveAttribute(
                 'style',
                 /NaN|Infinity/,
-            );
-        });
-
-        test('previews a hovered rating without changing the input and restores it on leave', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setValue('#rating', 2);
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
-            });
-
-            const slider = page.locator('.starrating');
-            const filled = page.locator('.starrating-filled');
-            const box = await slider.boundingBox();
-            await page.mouse.move(
-                box.x + (box.width * .7),
-                box.y + (box.height / 2),
-            );
-            await expect(filled).toHaveAttribute('style', /width: 80%/);
-            await expect(page.locator('#rating')).toHaveValue('2');
-
-            await page.mouse.move(box.x + box.width + 20, box.y + box.height + 20);
-            await expect(filled).toHaveAttribute('style', /width: 40%/);
-            await expect(page.locator('#rating')).toHaveValue('2');
-        });
-
-        test('does not preview when hover is disabled', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setValue('#rating', 2);
-                UI.StarRating.init($.findOne('#rating'), {
-                    hover: false,
-                    tooltip: false,
-                });
-            });
-
-            const slider = page.locator('.starrating');
-            const box = await slider.boundingBox();
-            await page.mouse.move(
-                box.x + (box.width * .8),
-                box.y + (box.height / 2),
-            );
-            await expect(page.locator('#rating')).toHaveValue('2');
-            await expect(page.locator('.starrating-filled')).toHaveAttribute(
-                'style',
-                /width: 40%/,
             );
         });
 
@@ -705,6 +792,39 @@ test.describe('StarRating', () => {
             await expect(slider).toHaveCSS('pointer-events', 'none');
         });
 
+        test('forwards focus from the hidden input', async ({ page }) => {
+            await page.evaluate((_) => {
+                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+                $.focus('#rating');
+            });
+
+            await expect(page.locator('.starrating')).toBeFocused();
+        });
+    });
+
+    test.describe('animate option', () => {
+        test('renders an animated wrapper by default', async ({ page }) => {
+            await page.evaluate((_) => {
+                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+            });
+
+            await expect(page.locator('.starrating-animate > .starrating')).toHaveCount(1);
+        });
+
+        test('does not render an animated wrapper when disabled', async ({ page }) => {
+            await page.evaluate((_) => {
+                UI.StarRating.init($.findOne('#rating'), {
+                    animate: false,
+                    tooltip: false,
+                });
+            });
+
+            await expect(page.locator('.starrating-animate')).toHaveCount(0);
+            await expect(page.locator('.starrating')).toHaveCount(1);
+        });
+    });
+
+    test.describe('displayOnly option', () => {
         test('renders display-only controls without interaction handlers', async ({ page }) => {
             await page.evaluate((_) => {
                 $.setValue('#rating', 2);
@@ -731,39 +851,185 @@ test.describe('StarRating', () => {
             await expect(slider).toHaveAttribute('aria-readonly', 'true');
             await expect(slider).toHaveAttribute('tabindex', '0');
         });
+    });
 
-        test('emits one namespaced change for each distinct normalized value', async ({ page }) => {
+    test.describe('hover option', () => {
+        test('previews a hovered rating and restores the committed value on leave', async ({ page }) => {
             await page.evaluate((_) => {
-                const input = $.findOne('#rating');
-                const component = UI.StarRating.init(input, { tooltip: false });
-                window.changeCount = 0;
-                window.lastChangeNamespace = null;
-                window.lastChangeSkipUpdate = null;
-                $.addEvent(input, 'change.ui.starrating', (event) => {
-                    window.changeCount++;
-                    window.lastChangeNamespace = event.namespace;
-                    window.lastChangeSkipUpdate = event.skipUpdate;
-                });
-                component.setValue(2);
-                component.setValue(2);
-                component.setValue(2.1);
-                component.setValue(3);
-                component.setValue(Number.NaN);
+                $.setValue('#rating', 2);
+                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
             });
 
-            await expect(page.locator('#rating')).toHaveValue('3');
-            expect(await page.evaluate((_) => window.changeCount)).toBe(2);
-            expect(await page.evaluate((_) => window.lastChangeNamespace)).toBe('ui.starrating');
-            expect(await page.evaluate((_) => window.lastChangeSkipUpdate)).toBe(true);
+            const slider = page.locator('.starrating');
+            const filled = page.locator('.starrating-filled');
+            const box = await slider.boundingBox();
+            await page.mouse.move(
+                box.x + (box.width * .7),
+                box.y + (box.height / 2),
+            );
+            await expect(filled).toHaveAttribute('style', /width: 80%/);
+            await expect(page.locator('#rating')).toHaveValue('2');
+
+            await page.mouse.move(box.x + box.width + 20, box.y + box.height + 20);
+            await expect(filled).toHaveAttribute('style', /width: 40%/);
+            await expect(page.locator('#rating')).toHaveValue('2');
         });
 
-        test('forwards focus from the hidden input', async ({ page }) => {
+        test('does not preview when disabled', async ({ page }) => {
             await page.evaluate((_) => {
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
-                $.focus('#rating');
+                $.setValue('#rating', 2);
+                UI.StarRating.init($.findOne('#rating'), {
+                    hover: false,
+                    tooltip: false,
+                });
             });
 
-            await expect(page.locator('.starrating')).toBeFocused();
+            const slider = page.locator('.starrating');
+            const box = await slider.boundingBox();
+            await page.mouse.move(
+                box.x + (box.width * .8),
+                box.y + (box.height / 2),
+            );
+            await expect(page.locator('#rating')).toHaveValue('2');
+            await expect(page.locator('.starrating-filled')).toHaveAttribute(
+                'style',
+                /width: 40%/,
+            );
+        });
+    });
+
+    test.describe('min, max, and step options', () => {
+        test('clamps and anchors stepped values to the effective minimum', async ({ page }) => {
+            await page.evaluate((_) => {
+                UI.StarRating.init($.findOne('#rating'), {
+                    max: 1.1,
+                    min: .1,
+                    step: .2,
+                    tooltip: false,
+                }).setValue(.2);
+            });
+            await expect(page.locator('#rating')).toHaveValue('0.3');
+            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '0.3');
+
+            await page.evaluate((_) => {
+                $.getData('#rating', 'starrating').setValue(-10);
+            });
+            await expect(page.locator('#rating')).toHaveValue('0.1');
+
+            await page.evaluate((_) => {
+                $.getData('#rating', 'starrating').setValue(10);
+            });
+            await expect(page.locator('#rating')).toHaveValue('1.1');
+        });
+
+        test('handles decimal exponent precision', async ({ page }) => {
+            await page.evaluate((_) => {
+                $.setAttribute('#rating', {
+                    min: '1e-7',
+                    step: '2e-7',
+                });
+                UI.StarRating.init($.findOne('#rating'), {
+                    max: .00001,
+                    tooltip: false,
+                }).setValue(2e-7);
+            });
+
+            await expect(page.locator('#rating')).toHaveValue('3e-7');
+            await expect(page.locator('.starrating')).toHaveAttribute(
+                'aria-valuenow',
+                '3e-7',
+            );
+        });
+
+        test('preserves unrestricted fractional values for step any', async ({ page }) => {
+            await page.evaluate((_) => {
+                $.setAttribute('#rating', { step: 'any' });
+                UI.StarRating.init($.findOne('#rating'), { tooltip: false })
+                    .setValue(.4444);
+            });
+
+            await expect(page.locator('#rating')).toHaveValue('0.4444');
+            await expect(page.locator('.starrating')).toHaveAttribute(
+                'aria-valuenow',
+                '0.4444',
+            );
+        });
+
+        test('normalizes invalid component configuration safely', async ({ page }) => {
+            await page.evaluate((_) => {
+                UI.StarRating.init($.findOne('#rating'), {
+                    max: Number.NaN,
+                    min: Number.POSITIVE_INFINITY,
+                    stars: Number.NaN,
+                    step: -1,
+                    tooltip: false,
+                }).setValue(.375);
+            });
+
+            await expect(page.locator('.starrating-outline > svg')).toHaveCount(5);
+            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuemin', '0');
+            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuemax', '5');
+            await expect(page.locator('#rating')).toHaveValue('0.375');
+        });
+    });
+
+    test.describe('size option', () => {
+        test('renders every size and preserves the public size custom property', async ({ page }) => {
+            await page.evaluate((_) => {
+                $.setHTML(
+                    document.body,
+                    ['xs', 'sm', 'md', 'lg', 'xl']
+                        .map((size) => `<input id="${size}" type="number">`)
+                        .join(''),
+                );
+                for (const size of ['xs', 'sm', 'md', 'lg', 'xl']) {
+                    UI.StarRating.init($.findOne(`#${size}`), {
+                        size,
+                        tooltip: false,
+                    });
+                }
+            });
+
+            const sliders = page.locator('.starrating');
+            await expect(sliders).toHaveCount(5);
+            for (const [index, size] of ['xs', 'sm', 'md', 'lg', 'xl'].entries()) {
+                await expect(sliders.nth(index)).toHaveClass(`starrating starrating-${size}`);
+            }
+            await expect(sliders.first()).toHaveCSS('font-size', '16px');
+            expect(await sliders.last().evaluate((node) =>
+                Number.parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThan(16);
+        });
+    });
+
+    test.describe('stars option', () => {
+        test('renders a normalized custom star count', async ({ page }) => {
+            await page.evaluate((_) => {
+                UI.StarRating.init($.findOne('#rating'), {
+                    stars: 7.9,
+                    tooltip: false,
+                });
+            });
+
+            await expect(page.locator('.starrating-outline > svg')).toHaveCount(7);
+            await expect(page.locator('.starrating-filled > svg')).toHaveCount(7);
+            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuemax', '7');
+        });
+    });
+
+    test.describe('ratingText option', () => {
+        test('updates tooltip and ARIA text with custom rating text', async ({ page }) => {
+            await page.evaluate((_) => {
+                const component = UI.StarRating.init($.findOne('#rating'), {
+                    ratingText: (rating) => `Score ${rating} of 5`,
+                });
+                component.setValue(3);
+            });
+
+            const slider = page.locator('.starrating');
+            await expect(slider).toHaveAttribute('aria-valuetext', 'Score 3 of 5');
+            await expect(slider).toHaveAttribute('data-ui-title', 'Score 3 of 5');
+            await slider.focus();
+            await expect(page.locator('.tooltip-inner')).toHaveText('Score 3 of 5');
         });
     });
 
@@ -781,21 +1047,6 @@ test.describe('StarRating', () => {
 
             await page.locator('#rating2').focus();
             await expect(page.locator('.tooltip')).toHaveCount(0);
-        });
-
-        test('updates custom tooltip and ARIA text with the rating', async ({ page }) => {
-            await page.evaluate((_) => {
-                const component = UI.StarRating.init($.findOne('#rating'), {
-                    ratingText: (rating) => `Score ${rating} of 5`,
-                });
-                component.setValue(3);
-            });
-
-            const slider = page.locator('.starrating');
-            await expect(slider).toHaveAttribute('aria-valuetext', 'Score 3 of 5');
-            await expect(slider).toHaveAttribute('data-ui-title', 'Score 3 of 5');
-            await slider.focus();
-            await expect(page.locator('.tooltip-inner')).toHaveText('Score 3 of 5');
         });
 
         test('keeps the tooltip visible until every interaction trigger ends', async ({ page }) => {
@@ -907,133 +1158,63 @@ test.describe('StarRating', () => {
         });
     });
 
-    test.describe('#dispose', () => {
-        test('removes the StarRating and restores the original input', async ({ page }) => {
+    test.describe('customization', () => {
+        test('uses customized defaults', async ({ page }) => {
             await page.evaluate((_) => {
-                $.setHTML(
-                    document.body,
-                    '<input class="existing" id="rating" tabindex="4" type="number">',
-                );
-                const input = $.findOne('#rating');
-                const component = UI.StarRating.init(input, { tooltip: false });
-                $.addClass(input, 'runtime');
-                component.dispose();
-                window.disposedNode = component.node;
-                window.disposedOptions = component.options;
+                UI.StarRating.defaults.stars = 3;
+                UI.StarRating.defaults.tooltip = false;
+                UI.StarRating.init($.findOne('#rating'));
             });
 
-            const input = page.locator('#rating');
-            await expect(input).toHaveClass('existing runtime');
-            await expect(input).toHaveAttribute('tabindex', '4');
-            await expect(page.locator('.starrating')).toHaveCount(0);
-            expect(await page.evaluate((_) => $.hasData('#rating', 'starrating'))).toBe(false);
-            expect(await page.evaluate((_) => window.disposedNode)).toBeNull();
-            expect(await page.evaluate((_) => window.disposedOptions)).toBeNull();
+            await expect(page.locator('.starrating-outline > svg')).toHaveCount(3);
+            await expect(page.locator('.starrating-filled > svg')).toHaveCount(3);
         });
 
-        test('restores existing hidden and absent tabindex state', async ({ page }) => {
+        test('uses customized classes', async ({ page }) => {
             await page.evaluate((_) => {
-                $.setHTML(
-                    document.body,
-                    '<input class="visually-hidden existing" id="rating" type="number">',
-                );
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false }).dispose();
-            });
-
-            const input = page.locator('#rating');
-            await expect(input).toHaveClass('visually-hidden existing');
-            await expect(input).not.toHaveAttribute('tabindex');
-            await expect(page.locator('.starrating')).toHaveCount(0);
-        });
-
-        test('restores owned label IDs without removing runtime IDs', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setHTML(
-                    document.body,
-                    '<label>Generated <input id="rating" type="number"></label><label id="existing" for="rating">Existing</label>',
-                );
+                UI.StarRating.classes.animate = 'custom-animate';
+                UI.StarRating.classes.container = 'custom-rating';
+                UI.StarRating.classes.filled = 'custom-filled';
+                UI.StarRating.classes.hide = 'custom-hidden';
+                UI.StarRating.classes.outline = 'custom-outline';
                 UI.StarRating.init($.findOne('#rating'), { tooltip: false });
             });
 
-            const labels = page.locator('label');
-            await expect(labels.first()).toHaveAttribute('id', /^starrating-label/);
-            await expect(labels.nth(1)).toHaveAttribute('id', 'existing');
-
-            await page.evaluate((_) => {
-                const input = $.findOne('#rating');
-                input.labels[0].id = 'runtime-label';
-                $.getData(input, 'starrating').dispose();
-            });
-            await expect(labels.first()).toHaveAttribute('id', 'runtime-label');
-
-            await page.evaluate((_) => {
-                const input = $.findOne('#rating');
-                input.labels[0].removeAttribute('id');
-                UI.StarRating.init(input, { tooltip: false });
-            });
-            await expect(labels.first()).toHaveAttribute('id', /^starrating-label/);
-
-            await page.evaluate((_) => {
-                $.getData('#rating', 'starrating').dispose();
-            });
-            await expect(labels.first()).not.toHaveAttribute('id');
-            await expect(labels.nth(1)).toHaveAttribute('id', 'existing');
+            const rating = page.locator('.custom-rating');
+            await expect(page.locator('.custom-animate > .custom-rating')).toHaveCount(1);
+            await expect(rating.locator(':scope > .custom-outline')).toHaveCount(1);
+            await expect(rating.locator(':scope > .custom-filled')).toHaveCount(1);
+            await expect(page.locator('#rating')).toHaveClass('custom-hidden');
         });
 
-        test('disposes through fQuery and can reinitialize', async ({ page }) => {
+        test('uses customized icons', async ({ page }) => {
             await page.evaluate((_) => {
-                $('#rating').starrating({ tooltip: false });
-                $('#rating').starrating('dispose');
+                UI.StarRating.icons.outline = '<span class="custom-outline-icon">○</span>';
+                UI.StarRating.icons.filled = '<span class="custom-filled-icon">●</span>';
+                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
             });
-            await expect(page.locator('.starrating')).toHaveCount(0);
-            expect(await page.evaluate((_) => $.hasData('#rating', 'starrating'))).toBe(false);
 
-            expect(await page.evaluate((_) =>
-                $('#rating').starrating({ tooltip: false }) instanceof UI.StarRating)).toBe(true);
-            await expect(page.locator('.starrating')).toHaveCount(1);
+            await expect(page.locator('.custom-outline-icon')).toHaveCount(5);
+            await expect(page.locator('.custom-filled-icon')).toHaveCount(5);
+            await expect(page.locator('.custom-outline-icon').first()).toHaveText('○');
+            await expect(page.locator('.custom-filled-icon').first()).toHaveText('●');
         });
 
-        test('disposes automatically when the original input is removed', async ({ page }) => {
+        test('uses customized language', async ({ page }) => {
             await page.evaluate((_) => {
-                const input = $.findOne('#rating');
-                window.removedComponent = UI.StarRating.init(input, { tooltip: false });
-                $.remove(input);
+                UI.StarRating.lang.star = 'point';
+                UI.StarRating.lang.stars = 'points';
+                UI.StarRating.init($.findOne('#rating'), { tooltip: false })
+                    .setValue(1);
             });
 
-            await expect(page.locator('#rating')).toHaveCount(0);
-            await expect(page.locator('.starrating')).toHaveCount(0);
-            expect(await page.evaluate((_) => window.removedComponent.node)).toBeNull();
-            expect(await page.evaluate((_) => window.removedComponent.options)).toBeNull();
-        });
+            const slider = page.locator('.starrating');
+            await expect(slider).toHaveAttribute('aria-valuetext', '1 point');
 
-        test('cleans up an active drag and visible tooltip safely', async ({ page }) => {
             await page.evaluate((_) => {
-                const input = $.findOne('#rating');
-                const component = UI.StarRating.init(input);
-                const slider = $.findOne('.starrating');
-                const rect = slider.getBoundingClientRect();
-                window.disposalErrors = 0;
-                window.addEventListener('error', (_) => window.disposalErrors++);
-                $.focus(slider);
-                slider.dispatchEvent(new MouseEvent('mousedown', {
-                    bubbles: true,
-                    button: 0,
-                    clientX: rect.left + (rect.width / 2),
-                }));
-                component.dispose();
-                window.dispatchEvent(new MouseEvent('mousemove', {
-                    clientX: rect.right,
-                }));
-                window.dispatchEvent(new MouseEvent('mouseup', {
-                    clientX: rect.right,
-                }));
-                window.dragDisposedComponent = component;
+                $.getData('#rating', 'starrating').setValue(2);
             });
-
-            await expect(page.locator('.starrating')).toHaveCount(0);
-            await expect(page.locator('.tooltip')).toHaveCount(0);
-            expect(await page.evaluate((_) => window.disposalErrors)).toBe(0);
-            expect(await page.evaluate((_) => window.dragDisposedComponent.node)).toBeNull();
+            await expect(slider).toHaveAttribute('aria-valuetext', '2 points');
         });
     });
 });

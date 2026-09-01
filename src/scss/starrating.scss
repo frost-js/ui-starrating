@@ -1,10 +1,10 @@
-@import "vars";
+@use "vars";
 
 .starrating {
-    --ui-starrating-font-size: #{$starrating-font-size};
-    --ui-starrating-color: #{$starrating-color};
-    --ui-starrating-focus-box-shadow: #{$starrating-focus-box-shadow};
-    --ui-starrating-disabled-opacity: #{$starrating-disabled-opacity};
+    --ui-starrating-font-size: #{vars.$starrating-font-size};
+    --ui-starrating-color: #{vars.$starrating-color};
+    --ui-starrating-focus-box-shadow: #{vars.$starrating-focus-box-shadow};
+    --ui-starrating-disabled-opacity: #{vars.$starrating-disabled-opacity};
 
     position: relative;
     display: inline-block;
@@ -13,6 +13,7 @@
     line-height: 1;
     color: var(--ui-starrating-color);
     white-space: nowrap;
+    user-select: none;
 
     &:focus-visible {
         outline: 0;
@@ -26,30 +27,50 @@
 
 .starrating-filled {
     position: absolute;
-    top: 0;
+    inset-block-start: 0;
+    inset-inline-start: 0;
     overflow: hidden;
 }
 
 .starrating-animate .starrating-filled {
-    transition: width $transition-time $transition-type;
+    transition: width var(--ui-transition-duration) var(--ui-transition-timing-function);
 }
 
 .starrating-disabled {
+    pointer-events: none;
     opacity: var(--ui-starrating-disabled-opacity);
 }
 
 .starrating-xl {
-    --ui-starrating-font-size: #{$starrating-xl-font-size};
+    --ui-starrating-font-size: #{vars.$starrating-xl-font-size};
 }
 
 .starrating-lg {
-    --ui-starrating-font-size: #{$starrating-lg-font-size};
+    --ui-starrating-font-size: #{vars.$starrating-lg-font-size};
 }
 
 .starrating-sm {
-    --ui-starrating-font-size: #{$starrating-sm-font-size};
+    --ui-starrating-font-size: #{vars.$starrating-sm-font-size};
 }
 
 .starrating-xs {
-    --ui-starrating-font-size: #{$starrating-xs-font-size};
+    --ui-starrating-font-size: #{vars.$starrating-xs-font-size};
+}
+
+@media (forced-colors: active) {
+    .starrating {
+        color: ButtonText;
+        forced-color-adjust: none;
+
+        &:focus-visible {
+            outline: 2px solid Highlight;
+            outline-offset: 2px;
+            box-shadow: none;
+        }
+    }
+
+    .starrating-disabled {
+        color: GrayText;
+        opacity: 1;
+    }
 }

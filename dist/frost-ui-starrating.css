@@ -10,6 +10,8 @@
   line-height: 1;
   color: var(--ui-starrating-color);
   white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .starrating:focus-visible {
   outline: 0;
@@ -21,15 +23,17 @@
 
 .starrating-filled {
   position: absolute;
-  top: 0;
+  inset-block-start: 0;
+  inset-inline-start: 0;
   overflow: hidden;
 }
 
 .starrating-animate .starrating-filled {
-  transition: width 0.25s ease-in-out;
+  transition: width var(--ui-transition-duration) var(--ui-transition-timing-function);
 }
 
 .starrating-disabled {
+  pointer-events: none;
   opacity: var(--ui-starrating-disabled-opacity);
 }
 
@@ -47,6 +51,22 @@
 
 .starrating-xs {
   --ui-starrating-font-size: 1rem;
+}
+
+@media (forced-colors: active) {
+  .starrating {
+    color: ButtonText;
+    forced-color-adjust: none;
+  }
+  .starrating:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+  .starrating-disabled {
+    color: GrayText;
+    opacity: 1;
+  }
 }
 
 /*# sourceMappingURL=frost-ui-starrating.css.map */

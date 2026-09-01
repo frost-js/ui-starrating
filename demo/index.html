@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Frost UI StarRating Demo</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fr0st/ui@latest/dist/frost-ui.min.css">
+    <link rel="stylesheet" href="../dist/frost-ui-starrating.css">
+    <link rel="stylesheet" href="assets/demo.css">
+    <script src="https://cdn.jsdelivr.net/npm/@fr0st/ui@latest/dist/frost-ui-bundle.min.js" defer></script>
+    <script src="../dist/frost-ui-starrating.js" defer></script>
+    <script src="assets/demo.js" defer></script>
+</head>
+
+<body>
+    <header class="navbar bg-glass sticky-top border-bottom">
+        <div class="container d-flex align-items-center justify-content-between gap-3">
+            <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="#top">
+                <span class="badge bg-primary bg-gradient shadow-glow fs-5" aria-hidden="true">F</span>
+                <span>StarRating</span>
+            </a>
+            <div class="d-flex align-items-center gap-2">
+                <label class="small fw-bold mb-0" for="demo-theme">Theme</label>
+                <select class="input-outline input-sm w-auto rounded-pill" id="demo-theme" data-demo-theme>
+                    <option value="system">System</option>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                </select>
+            </div>
+        </div>
+    </header>
+
+    <main class="container py-4 py-lg-5" id="top">
+        <section class="card border-0 overflow-hidden shadow-lg mb-5">
+            <div class="row g-0 align-items-stretch">
+                <div class="col-lg-7 d-flex align-items-center bg-ambient">
+                    <div class="p-4 p-md-5">
+                        <span class="badge bg-primary-subtle text-primary-subtle mb-3">Frost UI v3 component</span>
+                        <h1 class="display-2 mb-4">Ratings that feel <span class="text-gradient">effortless.</span></h1>
+                        <p class="lead text-body-secondary mb-4">Explore fractional scores, flexible ranges, custom star counts, keyboard control, mouse and touch interaction, live events, themes, and RTL.</p>
+                        <nav class="d-flex flex-wrap gap-2" aria-label="Demo sections">
+                            <a class="btn btn-primary ripple" href="#sizes">Explore sizes</a>
+                            <a class="btn btn-secondary ripple" href="#interaction">Try interaction</a>
+                            <a class="btn btn-outline-primary ripple" href="#methods-events">Use the API</a>
+                        </nav>
+                    </div>
+                </div>
+                <div class="col-lg-5 d-flex align-items-center bg-glass border-start">
+                    <div class="p-4 p-md-5 w-100">
+                        <small class="text-body-secondary d-block mb-2">Live fractional example</small>
+                        <label class="fw-bold" for="hero-rating">How useful is this component?</label>
+                        <div class="demo-rating-stage mt-3">
+                            <input
+                                id="hero-rating"
+                                name="heroRating"
+                                type="number"
+                                min="0"
+                                max="5"
+                                step="0.5"
+                                value="3.5"
+                                data-ui-toggle="starrating"
+                                required>
+                        </div>
+                        <p class="form-text mb-0">Click, drag, focus and use the arrow keys, or hover to preview.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-5" id="sizes">
+            <header class="border-bottom pb-3 mb-4">
+                <span class="text-primary fw-bold">Responsive presentation</span>
+                <h2 class="h3 mb-1">Five rating sizes</h2>
+                <p class="text-body-secondary mb-0">The size option changes the star scale while retaining the same slider behavior and accessible value.</p>
+            </header>
+            <div class="row g-3 align-items-stretch">
+                <div class="col-sm-6 col-lg">
+                    <div class="card card-body h-100 p-3">
+                        <label class="small fw-bold mb-2" for="rating-xs">Extra small <code>xs</code></label>
+                        <input id="rating-xs" type="number" value="4" data-ui-size="xs" data-ui-toggle="starrating">
+                    </div>
+                </div>
+                <div class="col-sm-6 col-lg">
+                    <div class="card card-body h-100 p-3">
+                        <label class="small fw-bold mb-2" for="rating-sm">Small <code>sm</code></label>
+                        <input id="rating-sm" type="number" value="4" data-ui-size="sm" data-ui-toggle="starrating">
+                    </div>
+                </div>
+                <div class="col-sm-6 col-lg">
+                    <div class="card card-body h-100 p-3">
+                        <label class="small fw-bold mb-2" for="rating-md">Medium <code>md</code></label>
+                        <input id="rating-md" type="number" value="4" data-ui-size="md" data-ui-toggle="starrating">
+                    </div>
+                </div>
+                <div class="col-sm-6 col-lg">
+                    <div class="card card-body h-100 p-3">
+                        <label class="small fw-bold mb-2" for="rating-lg">Large <code>lg</code></label>
+                        <input id="rating-lg" type="number" value="4" data-ui-size="lg" data-ui-toggle="starrating">
+                    </div>
+                </div>
+                <div class="col-sm-6 col-lg">
+                    <div class="card card-body h-100 p-3">
+                        <label class="small fw-bold mb-2" for="rating-xl">Extra large <code>xl</code></label>
+                        <input id="rating-xl" type="number" value="4" data-ui-size="xl" data-ui-toggle="starrating">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-5" id="ranges">
+            <header class="border-bottom pb-3 mb-4">
+                <span class="text-accent fw-bold">Flexible scales</span>
+                <h2 class="h3 mb-1">Fractions, star counts, and ranges</h2>
+                <p class="text-body-secondary mb-0">Native number attributes define form semantics and take precedence over matching component options.</p>
+            </header>
+            <div class="row g-4">
+                <div class="col-lg-4">
+                    <div class="card card-body h-100 p-4">
+                        <span class="badge bg-primary-subtle text-primary-subtle align-self-start mb-3">Quarter steps</span>
+                        <h3 class="h5">Fractional rating</h3>
+                        <p class="text-body-secondary">A step of <code>0.25</code> keeps precise partial scores.</p>
+                        <label class="fw-bold mt-auto mb-2" for="fractional-rating">Editorial score</label>
+                        <input id="fractional-rating" type="number" min="0" max="5" step="0.25" value="3.75" data-ui-toggle="starrating">
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card card-body h-100 p-4">
+                        <span class="badge bg-accent-subtle text-accent-subtle align-self-start mb-3">Ten stars</span>
+                        <h3 class="h5">Custom star count</h3>
+                        <p class="text-body-secondary">Render a larger visual scale with <code>stars: 10</code>.</p>
+                        <label class="fw-bold mt-auto mb-2" for="ten-star-rating">Audience score</label>
+                        <input id="ten-star-rating" type="number" value="7" data-ui-stars="10" data-ui-size="sm" data-ui-toggle="starrating">
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card card-body h-100 p-4">
+                        <span class="badge bg-success-subtle text-success-subtle align-self-start mb-3">2–4 range</span>
+                        <h3 class="h5">Minimum and maximum</h3>
+                        <p class="text-body-secondary">Home selects <code>2</code>; End selects <code>4</code>.</p>
+                        <label class="fw-bold mt-auto mb-2" for="range-rating">Qualified score</label>
+                        <input id="range-rating" type="number" min="2" max="4" step="0.5" value="3" data-ui-toggle="starrating">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-5" id="states">
+            <header class="border-bottom pb-3 mb-4">
+                <span class="text-success fw-bold">Native state</span>
+                <h2 class="h3 mb-1">Read-only and disabled ratings</h2>
+                <p class="text-body-secondary mb-0">The original input remains the source of truth for read-only presentation, disabled state, and form submission.</p>
+            </header>
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="card card-body h-100 p-4 bg-ambient">
+                        <span class="badge bg-secondary-subtle text-secondary-subtle align-self-start mb-3">Focus only</span>
+                        <h3 class="h5">Read-only</h3>
+                        <p class="text-body-secondary">The slider remains focusable and exposes <code>aria-readonly="true"</code>, but cannot be changed.</p>
+                        <label class="fw-bold mt-auto mb-2" for="readonly-rating">Published score</label>
+                        <input id="readonly-rating" type="number" step="0.5" value="4.5" data-ui-toggle="starrating" readonly>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card card-body h-100 p-4">
+                        <span class="badge bg-secondary-subtle text-secondary-subtle align-self-start mb-3">Unavailable</span>
+                        <h3 class="h5">Disabled</h3>
+                        <p class="text-body-secondary">The slider leaves the tab order, ignores pointer input, and uses Frost UI's disabled treatment.</p>
+                        <label class="fw-bold mt-auto mb-2" for="disabled-rating">Archived score</label>
+                        <input id="disabled-rating" type="number" value="2" data-ui-toggle="starrating" disabled>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-5" id="interaction">
+            <header class="border-bottom pb-3 mb-4">
+                <span class="text-primary fw-bold">Accessible interaction</span>
+                <h2 class="h3 mb-1">Keyboard and RTL</h2>
+                <p class="text-body-secondary mb-0">Focus a rating, then use arrows, Page Up or Page Down, Home, and End. Horizontal movement follows the visual direction.</p>
+            </header>
+            <div class="row g-4">
+                <div class="col-lg-7">
+                    <div class="card card-body h-100 p-4">
+                        <h3 class="h5">Keyboard controls</h3>
+                        <p class="text-body-secondary">Arrow keys use the configured step, Page keys move one point, and Home or End jump to the range boundaries.</p>
+                        <div class="d-flex flex-wrap gap-2 mb-4" aria-label="Supported keyboard keys">
+                            <kbd>←</kbd>
+                            <kbd>→</kbd>
+                            <kbd>↑</kbd>
+                            <kbd>↓</kbd>
+                            <kbd>Page Up</kbd>
+                            <kbd>Page Down</kbd>
+                            <kbd>Home</kbd>
+                            <kbd>End</kbd>
+                        </div>
+                        <label class="fw-bold mt-auto mb-2" for="keyboard-rating">Keyboard rating</label>
+                        <input id="keyboard-rating" type="number" step="0.5" value="2.5" data-ui-toggle="starrating">
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="card card-body h-100 p-4 demo-rtl-card" dir="rtl">
+                        <span class="badge bg-accent-subtle text-accent-subtle align-self-start mb-3">Right to left</span>
+                        <h3 class="h5">Mirrored interaction</h3>
+                        <p class="text-body-secondary">Fill begins on the right. Arrow Left increases and Arrow Right decreases.</p>
+                        <label class="fw-bold mt-auto mb-2" for="rtl-rating">تقييم المنتج</label>
+                        <input id="rtl-rating" type="number" value="3" data-ui-toggle="starrating" dir="rtl" aria-label="Product rating in right-to-left direction">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-5" id="methods-events">
+            <header class="border-bottom pb-3 mb-4">
+                <span class="text-accent fw-bold">Public API</span>
+                <h2 class="h3 mb-1">Methods and live events</h2>
+                <p class="text-body-secondary mb-0">Invoke the public methods and watch distinct committed values emit <code>change.ui.starrating</code>.</p>
+            </header>
+            <div class="row g-4">
+                <div class="col-lg-6">
+                    <div class="card card-body h-100 p-4">
+                        <span class="badge bg-primary-subtle text-primary-subtle align-self-start mb-3">Interactive instance</span>
+                        <label class="h5" for="api-rating">Method target</label>
+                        <p class="text-body-secondary">This rating uses half-star steps and begins at <code>2.5</code>.</p>
+                        <div class="demo-api-stage mb-4">
+                            <input id="api-rating" type="number" step="0.5" value="2.5" data-ui-toggle="starrating" required>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button class="btn btn-primary ripple" type="button" data-demo-action="set" data-demo-value="1">Set 1</button>
+                            <button class="btn btn-primary ripple" type="button" data-demo-action="set" data-demo-value="3.5">Set 3.5</button>
+                            <button class="btn btn-outline-primary ripple" type="button" data-demo-action="get">Get value</button>
+                            <button class="btn btn-outline-secondary ripple" type="button" data-demo-action="disable">Disable</button>
+                            <button class="btn btn-outline-success ripple" type="button" data-demo-action="enable">Enable</button>
+                            <button class="btn btn-outline-danger ripple" type="button" data-demo-action="dispose">Dispose</button>
+                            <button class="btn btn-secondary ripple" type="button" data-demo-action="init">Reinitialize</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card h-100 overflow-hidden">
+                        <div class="card-header d-flex align-items-center justify-content-between gap-3">
+                            <div>
+                                <small class="text-body-secondary d-block">Live output</small>
+                                <strong>Method and event log</strong>
+                            </div>
+                            <button class="btn btn-sm btn-outline-secondary ripple" type="button" data-demo-action="clear">Clear</button>
+                        </div>
+                        <ol class="list-group list-group-flush demo-event-log" id="event-log" role="log" aria-live="polite" aria-relevant="additions">
+                            <li class="list-group-item text-body-secondary">Ready. Change the rating or select a method.</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-top bg-glass">
+        <div class="container py-4 d-flex flex-wrap justify-content-between gap-2">
+            <span class="text-body-secondary">Frost UI StarRating</span>
+            <a href="https://github.com/frost-js/ui-starrating">View the repository</a>
+        </div>
+    </footer>
+</body>
+
+</html>

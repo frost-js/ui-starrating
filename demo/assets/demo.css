@@ -1,0 +1,18 @@
+.demo-rating-stage,
+.demo-api-stage {
+    min-height: 3.75rem;
+}
+
+.demo-event-log {
+    height: 19rem;
+    overflow-y: auto;
+}
+
+.demo-rtl-card {
+    text-align: start;
+}
+
+kbd {
+    min-width: 2rem;
+    text-align: center;
+}

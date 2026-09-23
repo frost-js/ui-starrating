@@ -96,7 +96,7 @@ var StarRating = class extends BaseComponent {
 	*/
 	disable() {
 		$.setAttribute(this.node, { disabled: true });
-		if (this.#dragging) this.#resetState();
+		this.#resetState();
 		this.#refreshDisabled();
 	}
 	/** @inheritdoc */

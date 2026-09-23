@@ -128,7 +128,7 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 		*/
 		disable() {
 			_fr0st_query.default.setAttribute(this.node, { disabled: true });
-			if (this.#dragging) this.#resetState();
+			this.#resetState();
 			this.#refreshDisabled();
 		}
 		/** @inheritdoc */

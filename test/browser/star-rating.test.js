@@ -290,6 +290,37 @@ test.describe('StarRating', () => {
             await expect(slider).toHaveAttribute('tabindex', '-1');
         });
 
+        test('restores the committed rating when disabled during a hover preview', async ({ page }) => {
+            await page.evaluate((_) => {
+                $.setValue('#rating', 2);
+                UI.StarRating.init($.findOne('#rating'));
+                window.disableChanges = 0;
+                $.addEvent('#rating', 'change.ui.starrating', (_) => window.disableChanges++);
+            });
+
+            const slider = page.locator('.starrating');
+            const filled = page.locator('.starrating-filled');
+            const box = await slider.boundingBox();
+            await page.mouse.move(
+                box.x + (box.width * .9),
+                box.y + (box.height / 2),
+            );
+            await expect(filled).toHaveAttribute('style', /width: 100%/);
+            await expect(slider).toHaveAttribute('data-ui-title', '5 stars');
+
+            await page.evaluate((_) => $.getData('#rating', 'starrating').disable());
+
+            await expect(page.locator('#rating')).toBeDisabled();
+            await expect(page.locator('#rating')).toHaveValue('2');
+            await expect(filled).toHaveAttribute('style', /width: 40%/);
+            await expect(slider).toHaveAttribute('aria-valuenow', '2');
+            await expect(slider).toHaveAttribute('data-ui-title', '2 stars');
+
+            await page.mouse.move(box.x + box.width + 20, box.y + box.height + 20);
+            await expect(filled).toHaveAttribute('style', /width: 40%/);
+            expect(await page.evaluate((_) => window.disableChanges)).toBe(0);
+        });
+
         test('disables the StarRating (query)', async ({ page }) => {
             await page.evaluate((_) => {
                 $('#rating').starrating({ tooltip: false });

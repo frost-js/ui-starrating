@@ -97,11 +97,7 @@ export default class StarRating extends BaseComponent {
      */
     disable() {
         $.setAttribute(this.node, { disabled: true });
-
-        if (this.#dragging) {
-            this.#resetState();
-        }
-
+        this.#resetState();
         this.#refreshDisabled();
     }
 

@@ -494,8 +494,11 @@ export default class StarRating extends BaseComponent {
             value !== this.#max
         ) {
             const steps = (value - this.#min) / this.#step;
-            const tolerance = Number.EPSILON * Math.max(1, Math.abs(steps));
-            value = this.#min + (Math.ceil(steps - tolerance) * this.#step);
+
+            if (Number.isFinite(steps)) {
+                const tolerance = Number.EPSILON * Math.max(1, Math.abs(steps));
+                value = this.#min + (Math.ceil(steps - tolerance) * this.#step);
+            }
         }
 
         if (this.#step !== null && this.#precision <= 100) {

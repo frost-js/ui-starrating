@@ -941,6 +941,23 @@ test.describe('StarRating', () => {
             );
         });
 
+        test('preserves valid ratings when a tiny step overflows the step count', async ({ page }) => {
+            await page.evaluate((_) => {
+                $.setAttribute('#rating', { step: '1e-320', value: '2' });
+                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+            });
+
+            await expect(page.locator('#rating')).toHaveValue('2');
+            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2');
+            await expect(page.locator('.starrating-filled')).toHaveAttribute('style', /width: 40%/);
+
+            await page.evaluate((_) => $.getData('#rating', 'starrating').setValue(3.5));
+
+            await expect(page.locator('#rating')).toHaveValue('3.5');
+            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '3.5');
+            await expect(page.locator('.starrating-filled')).toHaveAttribute('style', /width: 70%/);
+        });
+
         test('preserves unrestricted fractional values for step any', async ({ page }) => {
             await page.evaluate((_) => {
                 $.setAttribute('#rating', { step: 'any' });

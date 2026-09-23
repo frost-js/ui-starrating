@@ -256,6 +256,7 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 				if (value === null) return false;
 				this.#dragging = true;
 				_fr0st_query.default.focus(this.#container);
+				if (!this.#dragging) return false;
 				_fr0st_query.default.setStyle(this.#filledContainer, { transition: "none" });
 				this.setValue(value);
 				if (!this.#dragging) return false;

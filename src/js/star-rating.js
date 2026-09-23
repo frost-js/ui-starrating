@@ -302,6 +302,12 @@ export default class StarRating extends BaseComponent {
 
                 this.#dragging = true;
                 $.focus(this.#container);
+
+                // A focus handler may disable or dispose the control synchronously.
+                if (!this.#dragging) {
+                    return false;
+                }
+
                 $.setStyle(this.#filledContainer, { transition: 'none' });
                 this.setValue(value);
 

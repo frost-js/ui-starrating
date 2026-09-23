@@ -193,6 +193,39 @@ test.describe('StarRating interrupted drags', () => {
         }
     }
 
+    for (const action of ['disable', 'dispose']) {
+        test(`cancels drag startup when a focus handler calls ${action}`, async ({ page }) => {
+            const errors = [];
+            page.on('pageerror', (error) => errors.push(error.message));
+            await page.evaluate((action) => {
+                const input = $.findOne('#rating');
+                const component = $.getData(input, 'starrating');
+                const slider = $.findOne('.starrating');
+                const rect = slider.getBoundingClientRect();
+                window.focusChanges = 0;
+                input.addEventListener('change', (_) => window.focusChanges++);
+                slider.addEventListener('focus', (_) => component[action](), { once: true });
+                slider.dispatchEvent(new MouseEvent('mousedown', {
+                    button: 0,
+                    clientX: rect.left + (rect.width * .9),
+                }));
+                window.dispatchEvent(new MouseEvent('mousemove', { clientX: rect.right }));
+                window.dispatchEvent(new MouseEvent('mouseup', { clientX: rect.right }));
+            }, action);
+
+            await expect(page.locator('#rating')).toHaveValue('2');
+            if (action === 'disable') {
+                await expect(page.locator('#rating')).toBeDisabled();
+                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2');
+                expect(await page.locator('.starrating-filled').evaluate((node) => node.style.transition)).toBe('');
+            } else {
+                await expect(page.locator('.starrating')).toHaveCount(0);
+            }
+            expect(await page.evaluate((_) => window.focusChanges)).toBe(0);
+            expect(errors).toEqual([]);
+        });
+    }
+
     test('does not retain a drag tooltip when a change handler disables the control', async ({ page }) => {
         await page.evaluate((_) => {
             const input = $.findOne('#rating');

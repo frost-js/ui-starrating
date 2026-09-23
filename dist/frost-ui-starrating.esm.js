@@ -224,6 +224,7 @@ var StarRating = class extends BaseComponent {
 			if (value === null) return false;
 			this.#dragging = true;
 			$.focus(this.#container);
+			if (!this.#dragging) return false;
 			$.setStyle(this.#filledContainer, { transition: "none" });
 			this.setValue(value);
 			if (!this.#dragging) return false;

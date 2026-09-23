@@ -25,12 +25,6 @@ Accessible star-rating control for Frost UI with fractional values, configurable
 - Prebuilt ESM and UMD bundles plus expanded and minified CSS, all with source maps
 - JSDoc-powered IntelliSense
 
-## Browser support
-
-StarRating follows Frost UI's modern Baseline browser policy. JavaScript bundles target Vite's `baseline-widely-available` target, while stylesheet processing uses the package's `baseline newly available` Browserslist query.
-
-Continuous integration runs the browser suite in Chromium on Node 20, 22, and 24, and in Firefox and WebKit on Node 24. Internet Explorer is not supported.
-
 ## Installation
 
 ### Browser projects / bundlers
@@ -57,7 +51,7 @@ const rating = StarRating.init(
 );
 ```
 
-StarRating v4 requires `@fr0st/ui ^4.0.0` and `@fr0st/query ^5.0.0` as peer dependencies so the component shares the application's UI and fQuery instances. The package root, `dist/*`, and `src/*` are available through package exports.
+`@fr0st/ui` and `@fr0st/query` are peer dependencies so the component shares the application's UI and fQuery instances. The package root, `dist/*`, and `src/*` are available through package exports.
 
 StarRating requires a browser DOM or a compatible DOM environment configured through fQuery. Server-rendered applications should load the component on the client.
 
@@ -249,6 +243,8 @@ rating.dispose();
 
 An instance exposes its original input as `instance.node` and its frozen resolved configuration as `instance.options`. Both become `null` after disposal.
 
+`dispose()` restores the input's original visually-hidden state and `tabindex`, preserves its current value and disabled state and unrelated classes, and removes generated label IDs only if the application has not changed them. The input can then be initialized again with new options. Removing the original input through fQuery also disposes the component automatically.
+
 ## Events
 
 StarRating emits one namespaced fQuery event from the original number input when a component-driven action commits a distinct normalized rating:
@@ -362,22 +358,7 @@ Normal document and ancestor direction is respected. A `dir` attribute placed di
 
 In RTL layouts, fill begins at the inline start, pointer values are mirrored, and Arrow Left increases while Arrow Right decreases. Vertical keys, Home, End, and Page keys retain their normal meaning. Forced-colors mode replaces the star and focus colors with system colors.
 
-## Disposal
-
-`dispose()` removes the rendered rating, component events, active drag state, tooltip state, and registered fQuery component data. It restores the input's pre-existing visually-hidden state and `tabindex` while preserving unrelated or runtime-added classes.
-
-Generated label IDs are removed only when they still contain the component-generated value. Existing IDs and IDs changed by the application remain untouched. The input's current value and disabled state are preserved. Removing the original input through fQuery also disposes the component automatically.
-
-```js
-rating.dispose();
-
-// The same input can now be initialized with different options.
-const compactRating = StarRating.init(node, { size: 'sm' });
-```
-
 ## Development
-
-The npm override keeps `baseline-browser-mapping` at `2.11.20`: newer mapping data currently makes `baseline newly available` resolve to an incomplete or empty browser list with the installed Can I Use data. Revisit the override when those datasets align, and verify the resolved browser targets and generated CSS before removing it.
 
 Use Node.js matching `^20.19.0 || ^22.13.0 || >=24`. Install dependencies with `npm ci`, then install Playwright browsers with `npx playwright install --with-deps`.
 

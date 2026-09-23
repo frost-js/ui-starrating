@@ -1,10 +1,8 @@
 import { expect, test } from '#test';
-import { resetPage } from '../setup/browser.js';
+
+test.use({ mockClock: true });
 
 test.beforeEach(async ({ page }) => {
-    await resetPage(page);
-    await page.mouse.move(799, 599);
-    await page.clock.install();
     await page.evaluate((_) => {
         $.setHtml(document.body, '<form id="form"><input id="rating" type="number" step="0.5" value="2"></form><button id="other">Other</button>');
         UI.StarRating.init($.findOne('#rating'), { tooltip: false });
@@ -128,9 +126,9 @@ test.describe('StarRating form resets', () => {
 
 test.describe('StarRating interrupted drags', () => {
     for (const pointer of ['mouse', 'touch']) {
-        for (const action of ['disable', 'reset', 'canceled reset']) {
-            test(`${action} during a ${pointer} drag`, async ({ page }) => {
-                await page.evaluate(({ pointer, action }) => {
+        test.describe(`${pointer} drag`, () => {
+            test.beforeEach(async ({ page }) => {
+                await page.evaluate((pointer) => {
                     const input = $.findOne('#rating');
                     const component = $.getData(input, 'starrating');
                     component.dispose();
@@ -156,41 +154,75 @@ test.describe('StarRating interrupted drags', () => {
                     window.dragEvent('move', .5);
                     window.interruptedChanges = 0;
                     $.addEvent(input, 'change.ui.starrating', (_) => window.interruptedChanges++);
-                    if (action === 'disable') {
-                        $.getData(input, 'starrating').disable();
-                    } else {
-                        if (action === 'canceled reset') {
-                            input.form.addEventListener('reset', (event) => event.preventDefault());
-                        }
-                        input.form.reset();
-                    }
-                }, { pointer, action });
+                }, pointer);
+            });
+
+            test('disabling ends the drag and preserves the committed value', async ({ page }) => {
+                await page.evaluate((_) => $.getData('#rating', 'starrating').disable());
                 await page.clock.runFor(1);
 
-                const expected = action === 'reset' ? '2' : '2.5';
-                await expect(page.locator('#rating')).toHaveValue(expected);
-                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', expected);
-                if (action !== 'canceled reset') {
-                    expect(await page.locator('.starrating-filled').evaluate((node) => node.style.transition)).toBe('');
-                    await page.locator('#other').focus();
-                    await expect(page.locator('.tooltip')).toHaveCount(0);
-                }
+                await expect(page.locator('#rating')).toBeDisabled();
+                await expect(page.locator('#rating')).toHaveValue('2.5');
+                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2.5');
+                expect(await page.locator('.starrating-filled').evaluate((node) => node.style.transition)).toBe('');
+                await page.locator('#other').focus();
+                await expect(page.locator('.tooltip')).toHaveCount(0);
 
                 await page.evaluate((_) => {
                     window.dragEvent('move', .9);
                     window.dragEvent('end', .9);
                 });
-                await expect(page.locator('#rating')).toHaveValue(action === 'canceled reset' ? '4.5' : expected);
-                expect(await page.evaluate((_) => window.interruptedChanges)).toBe(action === 'canceled reset' ? 1 : 0);
+                await expect(page.locator('#rating')).toHaveValue('2.5');
+                expect(await page.evaluate((_) => window.interruptedChanges)).toBe(0);
 
-                if (action === 'disable') {
-                    await page.evaluate((_) => $.getData('#rating', 'starrating').enable());
-                }
+                await page.evaluate((_) => $.getData('#rating', 'starrating').enable());
                 await page.locator('.starrating').press('ArrowUp');
-                const nextValues = { 'disable': '3', 'reset': '2.5', 'canceled reset': '5' };
-                await expect(page.locator('#rating')).toHaveValue(nextValues[action]);
+                await expect(page.locator('#rating')).toHaveValue('3');
             });
-        }
+
+            test('resetting ends the drag and restores the default value', async ({ page }) => {
+                await page.evaluate((_) => $.findOne('#form').reset());
+                await page.clock.runFor(1);
+
+                await expect(page.locator('#rating')).toHaveValue('2');
+                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2');
+                expect(await page.locator('.starrating-filled').evaluate((node) => node.style.transition)).toBe('');
+                await page.locator('#other').focus();
+                await expect(page.locator('.tooltip')).toHaveCount(0);
+
+                await page.evaluate((_) => {
+                    window.dragEvent('move', .9);
+                    window.dragEvent('end', .9);
+                });
+                await expect(page.locator('#rating')).toHaveValue('2');
+                expect(await page.evaluate((_) => window.interruptedChanges)).toBe(0);
+
+                await page.locator('.starrating').press('ArrowUp');
+                await expect(page.locator('#rating')).toHaveValue('2.5');
+            });
+
+            test('canceling a reset allows the drag to continue', async ({ page }) => {
+                await page.evaluate((_) => {
+                    const form = $.findOne('#form');
+                    form.addEventListener('reset', (event) => event.preventDefault());
+                    form.reset();
+                });
+                await page.clock.runFor(1);
+
+                await expect(page.locator('#rating')).toHaveValue('2.5');
+                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2.5');
+
+                await page.evaluate((_) => {
+                    window.dragEvent('move', .9);
+                    window.dragEvent('end', .9);
+                });
+                await expect(page.locator('#rating')).toHaveValue('4.5');
+                expect(await page.evaluate((_) => window.interruptedChanges)).toBe(1);
+
+                await page.locator('.starrating').press('ArrowUp');
+                await expect(page.locator('#rating')).toHaveValue('5');
+            });
+        });
     }
 
     for (const action of ['disable', 'dispose']) {

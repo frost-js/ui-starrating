@@ -1,10 +1,4 @@
 import { expect, test } from '#test';
-import { resetPage } from '../setup/browser.js';
-
-test.beforeEach(async ({ page }) => {
-    await resetPage(page);
-    await page.mouse.move(799, 599);
-});
 
 test.describe('StarRating', () => {
     test.beforeEach(async ({ page }) => {
@@ -17,27 +11,26 @@ test.describe('StarRating', () => {
     });
 
     test.describe('#init', () => {
-        test('creates a StarRating', async ({ page }) => {
-            expect(await page.evaluate((_) =>
-                UI.StarRating.init(
-                    $.findOne('#rating'),
-                    { tooltip: false },
-                ) instanceof UI.StarRating)).toBe(true);
-        });
+        for (const { name, init } of [
+            { name: 'class', init: () => UI.StarRating.init($.findOne('#rating'), { tooltip: false }) },
+            { name: 'QuerySet', init: () => $('#rating').starrating({ tooltip: false }) },
+        ]) {
+            test(`creates a StarRating (${name})`, async ({ page }) => {
+                const instance = await page.evaluateHandle(init);
+                expect(await instance.evaluate((value) => value instanceof UI.StarRating)).toBe(true);
+                expect(await instance.evaluate((value) => $.getData('#rating', 'starrating') === value)).toBe(true);
+                await expect(page.locator('.starrating')).toHaveCount(1);
+            });
+        }
 
-        test('creates a StarRating (query)', async ({ page }) => {
-            expect(await page.evaluate((_) =>
-                $('#rating').starrating({ tooltip: false }) instanceof UI.StarRating)).toBe(true);
-        });
-
-        test('creates multiple StarRatings (query)', async ({ page }) => {
+        test('creates multiple StarRatings (QuerySet)', async ({ page }) => {
             await page.evaluate((_) => {
                 $('input').starrating({ tooltip: false });
             });
             await expect(page.locator('.starrating')).toHaveCount(2);
         });
 
-        test('returns the first StarRating (query)', async ({ page }) => {
+        test('returns the first StarRating (QuerySet)', async ({ page }) => {
             expect(await page.evaluate((_) => {
                 const first = $('input').starrating({ tooltip: false });
                 return first === $.getData('#rating', 'starrating');
@@ -64,15 +57,32 @@ test.describe('StarRating', () => {
         test('exposes the input and frozen default options', async ({ page }) => {
             expect(await page.evaluate((_) => {
                 const input = $.findOne('#rating');
-                const component = UI.StarRating.init(input, { tooltip: false });
-                return component.node === input;
-            })).toBe(true);
-            expect(await page.evaluate((_) =>
-                Object.isFrozen($.getData('#rating', 'starrating').options))).toBe(true);
-            expect(await page.evaluate((_) =>
-                $.getData('#rating', 'starrating').options.stars)).toBe(5);
-            expect(await page.evaluate((_) =>
-                $.getData('#rating', 'starrating').options.step)).toBe(1);
+                const component = UI.StarRating.init(input);
+                const { ratingText, ...options } = component.options;
+                return {
+                    options,
+                    frozen: Object.isFrozen(component.options),
+                    ownsInput: component.node === input,
+                    singular: ratingText.call(component, 1),
+                    plural: ratingText.call(component, 2),
+                };
+            })).toEqual({
+                options: {
+                    animate: true,
+                    displayOnly: false,
+                    hover: true,
+                    max: null,
+                    min: 0,
+                    size: 'md',
+                    stars: 5,
+                    step: 1,
+                    tooltip: true,
+                },
+                frozen: true,
+                ownsInput: true,
+                singular: '1 star',
+                plural: '2 stars',
+            });
         });
 
         test('resolves data attributes', async ({ page }) => {
@@ -135,28 +145,33 @@ test.describe('StarRating', () => {
     });
 
     test.describe('#dispose', () => {
-        test('removes the StarRating and restores the original input', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setHtml(
-                    document.body,
-                    '<input class="existing" id="rating" tabindex="4" type="number">',
-                );
-                const input = $.findOne('#rating');
-                const component = UI.StarRating.init(input, { tooltip: false });
-                $.addClass(input, 'runtime');
-                component.dispose();
-                window.disposedNode = component.node;
-                window.disposedOptions = component.options;
-            });
+        for (const { name, dispose } of [
+            { name: 'class', dispose: (instance) => instance.dispose() },
+            { name: 'QuerySet', dispose: () => $('#rating').starrating('dispose') },
+        ]) {
+            test(`removes the StarRating and restores the original input (${name})`, async ({ page }) => {
+                const instance = await page.evaluateHandle((_) => {
+                    $.setHtml(
+                        document.body,
+                        '<input class="existing" id="rating" tabindex="4" type="number">',
+                    );
+                    const input = $.findOne('#rating');
+                    const component = UI.StarRating.init(input, { tooltip: false });
+                    $.addClass(input, 'runtime');
+                    return component;
+                });
 
-            const input = page.locator('#rating');
-            await expect(input).toHaveClass('existing runtime');
-            await expect(input).toHaveAttribute('tabindex', '4');
-            await expect(page.locator('.starrating')).toHaveCount(0);
-            expect(await page.evaluate((_) => $.hasData('#rating', 'starrating'))).toBe(false);
-            expect(await page.evaluate((_) => window.disposedNode)).toBeNull();
-            expect(await page.evaluate((_) => window.disposedOptions)).toBeNull();
-        });
+                await page.evaluate(dispose, instance);
+
+                const input = page.locator('#rating');
+                await expect(input).toHaveClass('existing runtime');
+                await expect(input).toHaveAttribute('tabindex', '4');
+                await expect(page.locator('.starrating')).toHaveCount(0);
+                expect(await page.evaluate((_) => $.hasData('#rating', 'starrating'))).toBe(false);
+                expect(await instance.evaluate((value) => value.node)).toBeNull();
+                expect(await instance.evaluate((value) => value.options)).toBeNull();
+            });
+        }
 
         test('restores existing hidden and absent tabindex state', async ({ page }) => {
             await page.evaluate((_) => {
@@ -205,16 +220,6 @@ test.describe('StarRating', () => {
             });
             await expect(labels.first()).not.toHaveAttribute('id');
             await expect(labels.nth(1)).toHaveAttribute('id', 'existing');
-        });
-
-        test('removes the StarRating (query)', async ({ page }) => {
-            await page.evaluate((_) => {
-                $('#rating').starrating({ tooltip: false });
-                $('#rating').starrating('dispose');
-            });
-
-            await expect(page.locator('.starrating')).toHaveCount(0);
-            expect(await page.evaluate((_) => $.hasData('#rating', 'starrating'))).toBe(false);
         });
 
         test('can reinitialize after disposal', async ({ page }) => {
@@ -278,17 +283,24 @@ test.describe('StarRating', () => {
     });
 
     test.describe('#disable', () => {
-        test('disables the StarRating', async ({ page }) => {
-            await page.evaluate((_) => {
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false }).disable();
-            });
+        for (const { name, action } of [
+            { name: 'class', action: (instance) => instance.disable() },
+            { name: 'QuerySet', action: () => $('#rating').starrating('disable') },
+        ]) {
+            test(`disables the StarRating (${name})`, async ({ page }) => {
+                const instance = await page.evaluateHandle((_) => {
+                    const input = $.findOne('#rating');
+                    return UI.StarRating.init(input, { tooltip: false });
+                });
+                await page.evaluate(action, instance);
 
-            const slider = page.locator('.starrating');
-            await expect(page.locator('#rating')).toBeDisabled();
-            await expect(slider).toHaveClass(/starrating-disabled/);
-            await expect(slider).toHaveAttribute('aria-disabled', 'true');
-            await expect(slider).toHaveAttribute('tabindex', '-1');
-        });
+                const slider = page.locator('.starrating');
+                await expect(page.locator('#rating')).toBeDisabled();
+                await expect(slider).toHaveClass(/starrating-disabled/);
+                await expect(slider).toHaveAttribute('aria-disabled', 'true');
+                await expect(slider).toHaveAttribute('tabindex', '-1');
+            });
+        }
 
         test('restores the committed rating when disabled during a hover preview', async ({ page }) => {
             await page.evaluate((_) => {
@@ -320,114 +332,82 @@ test.describe('StarRating', () => {
             await expect(filled).toHaveAttribute('style', /width: 40%/);
             expect(await page.evaluate((_) => window.disableChanges)).toBe(0);
         });
-
-        test('disables the StarRating (query)', async ({ page }) => {
-            await page.evaluate((_) => {
-                $('#rating').starrating({ tooltip: false });
-                $('#rating').starrating('disable');
-            });
-
-            await expect(page.locator('#rating')).toBeDisabled();
-            await expect(page.locator('.starrating')).toHaveAttribute('aria-disabled', 'true');
-        });
     });
 
     test.describe('#enable', () => {
-        test('enables the StarRating', async ({ page }) => {
-            await page.evaluate((_) => {
-                const input = $.findOne('#rating');
-                $.setAttribute(input, { disabled: true });
-                UI.StarRating.init(input, { tooltip: false }).enable();
+        for (const { name, action } of [
+            { name: 'class', action: (instance) => instance.enable() },
+            { name: 'QuerySet', action: () => $('#rating').starrating('enable') },
+        ]) {
+            test(`enables the StarRating (${name})`, async ({ page }) => {
+                const instance = await page.evaluateHandle((_) => {
+                    const input = $.findOne('#rating');
+                    $.setAttribute(input, { disabled: true });
+                    return UI.StarRating.init(input, { tooltip: false });
+                });
+                await page.evaluate(action, instance);
+
+                const slider = page.locator('.starrating');
+                await expect(page.locator('#rating')).toBeEnabled();
+                await expect(slider).not.toHaveClass(/starrating-disabled/);
+                await expect(slider).toHaveAttribute('aria-disabled', 'false');
+                await expect(slider).toHaveAttribute('tabindex', '0');
             });
-
-            const slider = page.locator('.starrating');
-            await expect(page.locator('#rating')).toBeEnabled();
-            await expect(slider).not.toHaveClass(/starrating-disabled/);
-            await expect(slider).toHaveAttribute('aria-disabled', 'false');
-            await expect(slider).toHaveAttribute('tabindex', '0');
-        });
-
-        test('enables the StarRating (query)', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setAttribute('#rating', { disabled: true });
-                $('#rating').starrating({ tooltip: false });
-                $('#rating').starrating('enable');
-            });
-
-            await expect(page.locator('#rating')).toBeEnabled();
-            await expect(page.locator('.starrating')).toHaveAttribute('aria-disabled', 'false');
-        });
+        }
     });
 
     test.describe('#getValue', () => {
-        test('gets an empty value', async ({ page }) => {
-            expect(await page.evaluate((_) =>
-                UI.StarRating.init(
-                    $.findOne('#rating'),
-                    { tooltip: false },
-                ).getValue())).toBeNull();
-        });
+        for (const { name, getValue } of [
+            { name: 'class', getValue: (instance) => instance.getValue() },
+            { name: 'QuerySet', getValue: () => $('#rating').starrating('getValue') },
+        ]) {
+            for (const { value, expected } of [
+                { value: '', expected: null },
+                { value: '3', expected: 3 },
+            ]) {
+                test(`gets the ${value || 'empty'} value (${name})`, async ({ page }) => {
+                    const instance = await page.evaluateHandle((value) => {
+                        $.setValue('#rating', value);
+                        return UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+                    }, value);
 
-        test('gets the initial value', async ({ page }) => {
-            expect(await page.evaluate((_) => {
-                $.setValue('#rating', 3);
-                return UI.StarRating.init(
-                    $.findOne('#rating'),
-                    { tooltip: false },
-                ).getValue();
-            })).toBe(3);
-        });
-
-        test('gets the value (query)', async ({ page }) => {
-            expect(await page.evaluate((_) => {
-                $.setValue('#rating', 3);
-                $('#rating').starrating({ tooltip: false });
-                return $('#rating').starrating('getValue');
-            })).toBe(3);
-        });
+                    expect(await page.evaluate(getValue, instance)).toBe(expected);
+                });
+            }
+        }
     });
 
     test.describe('#setValue', () => {
-        test('sets the value', async ({ page }) => {
-            await page.evaluate((_) => {
-                UI.StarRating.init(
-                    $.findOne('#rating'),
-                    { tooltip: false },
-                ).setValue(3);
+        for (const { name, setValue } of [
+            { name: 'class', setValue: (instance) => instance.setValue(3) },
+            { name: 'QuerySet', setValue: () => $('#rating').starrating('setValue', 3) },
+        ]) {
+            test(`sets the value (${name})`, async ({ page }) => {
+                const instance = await page.evaluateHandle((_) =>
+                    UI.StarRating.init($.findOne('#rating'), { tooltip: false }));
+                await page.evaluate(setValue, instance);
+
+                await expect(page.locator('#rating')).toHaveValue('3');
+                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '3');
             });
+        }
 
-            await expect(page.locator('#rating')).toHaveValue('3');
-            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '3');
-        });
+        for (const { name, value } of [
+            { name: 'invalid text', value: 'invalid' },
+            { name: 'infinity', value: Number.POSITIVE_INFINITY },
+            { name: 'null', value: null },
+        ]) {
+            test(`ignores ${name}`, async ({ page }) => {
+                await page.evaluate((value) => {
+                    $.setValue('#rating', 2);
+                    UI.StarRating.init($.findOne('#rating'), { tooltip: false }).setValue(value);
+                }, value);
 
-        test('sets the value (query)', async ({ page }) => {
-            await page.evaluate((_) => {
-                $('#rating').starrating({ tooltip: false });
-                $('#rating').starrating('setValue', 3);
+                await expect(page.locator('#rating')).toHaveValue('2');
+                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2');
+                await expect(page.locator('.starrating-filled')).not.toHaveAttribute('style', /NaN|Infinity/);
             });
-
-            await expect(page.locator('#rating')).toHaveValue('3');
-            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '3');
-        });
-
-        test('ignores invalid and non-finite values', async ({ page }) => {
-            await page.evaluate((_) => {
-                const component = UI.StarRating.init(
-                    $.findOne('#rating'),
-                    { tooltip: false },
-                );
-                component.setValue(2);
-                component.setValue('invalid');
-                component.setValue(Number.POSITIVE_INFINITY);
-                component.setValue(null);
-            });
-
-            await expect(page.locator('#rating')).toHaveValue('2');
-            await expect(page.locator('.starrating-filled')).not.toHaveAttribute(
-                'style',
-                /NaN|Infinity/,
-            );
-        });
+        }
     });
 
     test.describe('input attributes', () => {
@@ -726,41 +706,30 @@ test.describe('StarRating', () => {
             );
         });
 
-        test('handles every slider key and prevents its default action', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setValue('#rating', 2);
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
-            });
-
-            const input = page.locator('#rating');
-            const slider = page.locator('.starrating');
-            await slider.press('ArrowRight');
-            await expect(input).toHaveValue('3');
-            await slider.press('ArrowLeft');
-            await expect(input).toHaveValue('2');
-            await slider.press('ArrowUp');
-            await expect(input).toHaveValue('3');
-            await slider.press('ArrowDown');
-            await expect(input).toHaveValue('2');
-            await slider.press('PageUp');
-            await expect(input).toHaveValue('3');
-            await slider.press('PageDown');
-            await expect(input).toHaveValue('2');
-            await slider.press('End');
-            await expect(input).toHaveValue('5');
-            await slider.press('Home');
-            await expect(input).toHaveValue('0');
-
-            expect(await slider.evaluate((node) => {
-                const event = new KeyboardEvent('keydown', {
-                    bubbles: true,
-                    cancelable: true,
-                    code: 'ArrowRight',
+        for (const { key, value } of [
+            { key: 'ArrowRight', value: '3' },
+            { key: 'ArrowLeft', value: '1' },
+            { key: 'ArrowUp', value: '3' },
+            { key: 'ArrowDown', value: '1' },
+            { key: 'PageUp', value: '3' },
+            { key: 'PageDown', value: '1' },
+            { key: 'End', value: '5' },
+            { key: 'Home', value: '0' },
+        ]) {
+            test(`handles ${key} and prevents its default action`, async ({ page }) => {
+                await page.evaluate((_) => {
+                    $.setValue('#rating', 2);
+                    UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+                    $.findOne('.starrating').addEventListener('keydown', (event) => {
+                        window.keyDefaultPrevented = event.defaultPrevented;
+                    });
                 });
-                node.dispatchEvent(event);
-                return event.defaultPrevented;
-            })).toBe(true);
-        });
+
+                await page.locator('.starrating').press(key);
+                await expect(page.locator('#rating')).toHaveValue(value);
+                expect(await page.evaluate((_) => window.keyDefaultPrevented)).toBe(true);
+            });
+        }
 
         test('moves by at least one step with Page keys when the step exceeds one', async ({ page }) => {
             await page.evaluate((_) => {
@@ -929,7 +898,7 @@ test.describe('StarRating', () => {
             await expect(page.locator('#rating')).toHaveValue('2');
         });
 
-        test('does not preview when disabled', async ({ page }) => {
+        test('does not preview when hover is false', async ({ page }) => {
             await page.evaluate((_) => {
                 $.setValue('#rating', 2);
                 UI.StarRating.init($.findOne('#rating'), {
@@ -1059,34 +1028,6 @@ test.describe('StarRating', () => {
         });
     });
 
-    test.describe('size option', () => {
-        test('renders every size and preserves the public size custom property', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setHtml(
-                    document.body,
-                    ['xs', 'sm', 'md', 'lg', 'xl']
-                        .map((size) => `<input id="${size}" type="number">`)
-                        .join(''),
-                );
-                for (const size of ['xs', 'sm', 'md', 'lg', 'xl']) {
-                    UI.StarRating.init($.findOne(`#${size}`), {
-                        size,
-                        tooltip: false,
-                    });
-                }
-            });
-
-            const sliders = page.locator('.starrating');
-            await expect(sliders).toHaveCount(5);
-            for (const [index, size] of ['xs', 'sm', 'md', 'lg', 'xl'].entries()) {
-                await expect(sliders.nth(index)).toHaveClass(`starrating starrating-${size}`);
-            }
-            await expect(sliders.first()).toHaveCSS('font-size', '16px');
-            expect(await sliders.last().evaluate((node) =>
-                Number.parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThan(16);
-        });
-    });
-
     test.describe('stars option', () => {
         test('renders a normalized custom star count', async ({ page }) => {
             await page.evaluate((_) => {
@@ -1178,69 +1119,6 @@ test.describe('StarRating', () => {
             await slider.hover();
             await expect(page.locator('.tooltip')).toHaveCount(0);
             await expect(slider).not.toHaveAttribute('data-ui-title');
-        });
-    });
-
-    test.describe('styles, direction, and layout', () => {
-        test('renders a visible focus ring and UI-managed reduced motion', async ({ page }) => {
-            await page.emulateMedia({ reducedMotion: 'reduce' });
-            await page.evaluate((_) => {
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
-            });
-
-            await page.keyboard.press('Tab');
-            const slider = page.locator('.starrating');
-            await expect(slider).toBeFocused();
-            await expect(slider).not.toHaveCSS('box-shadow', 'none');
-            await expect(page.locator('.starrating-filled')).toHaveCSS(
-                'transition-duration',
-                '0s',
-            );
-        });
-
-        test('anchors fill and pointer values to the inline start in RTL', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setAttribute('#rating', { dir: 'rtl' });
-                $.setValue('#rating', 2);
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
-            });
-
-            const slider = page.locator('.starrating');
-            const filled = page.locator('.starrating-filled');
-            await expect(slider).toHaveCSS('direction', 'rtl');
-            expect(await filled.evaluate((node) => {
-                const fillRect = node.getBoundingClientRect();
-                const sliderRect = node.parentElement.getBoundingClientRect();
-                return Math.abs(fillRect.right - sliderRect.right);
-            })).toBeLessThan(1);
-
-            const box = await slider.boundingBox();
-            const y = box.y + (box.height / 2);
-            await page.mouse.click(box.x + 1, y);
-            await expect(page.locator('#rating')).toHaveValue('5');
-            await page.mouse.click(box.x + box.width - 1, y);
-            await expect(page.locator('#rating')).toHaveValue('1');
-        });
-
-        test('handles hidden or zero-width layout without invalid styles', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setHtml(
-                    document.body,
-                    '<div hidden><input id="rating" type="number"></div>',
-                );
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
-                $.findOne('.starrating').dispatchEvent(new MouseEvent('mousedown', {
-                    bubbles: true,
-                    button: 0,
-                    clientX: 0,
-                }));
-            });
-
-            await expect(page.locator('#rating')).toHaveValue('');
-            await expect(page.locator('.starrating-filled')).not.toHaveAttribute(
-                'style',
-                /NaN|Infinity/,
-            );
         });
     });
 

@@ -1,6 +1,30 @@
 import { BaseComponent, Tooltip, generateId, getPosition, initComponent } from "@fr0st/ui";
 import $ from "@fr0st/query";
 
+//#region src/js/helpers.js
+/**
+* Gets the number of decimal places represented by a finite number.
+* @param {number} value The number to inspect.
+* @returns {number} The number of decimal places.
+*/
+function getDecimalPlaces(value) {
+	const [coefficient, exponent = 0] = `${value}`.toLowerCase().split("e");
+	const decimals = (coefficient.split(".")[1] || "").length;
+	return Math.max(0, decimals - Number(exponent));
+}
+/**
+* Parses a finite numeric value.
+* @param {*} value The value to parse.
+* @param {number} fallback The fallback value.
+* @returns {number} The parsed value or fallback.
+*/
+function parseNumber(value, fallback) {
+	if (value === null || value === void 0 || `${value}`.trim() === "") return fallback;
+	const number = Number(value);
+	return Number.isFinite(number) ? number : fallback;
+}
+
+//#endregion
 //#region src/js/star-rating.js
 var window = $.getWindow();
 /**
@@ -20,7 +44,7 @@ var window = $.getWindow();
 * Controls a numeric input using an accessible star rating interface.
 * @augments {BaseComponent<StarRatingOptions>}
 */
-var StarRating = class StarRating extends BaseComponent {
+var StarRating = class extends BaseComponent {
 	#container;
 	#displayOnly = false;
 	#dragging = false;
@@ -40,27 +64,6 @@ var StarRating = class StarRating extends BaseComponent {
 	#tooltip;
 	#tooltipTriggers = /* @__PURE__ */ new Set();
 	/**
-	* Gets the number of decimal places represented by a finite number.
-	* @param {number} value The number to inspect.
-	* @returns {number} The number of decimal places.
-	*/
-	static #getDecimalPlaces(value) {
-		const [coefficient, exponent = 0] = `${value}`.toLowerCase().split("e");
-		const decimals = (coefficient.split(".")[1] || "").length;
-		return Math.max(0, decimals - Number(exponent));
-	}
-	/**
-	* Parses a finite numeric value.
-	* @param {*} value The value to parse.
-	* @param {number} fallback The fallback value.
-	* @returns {number} The parsed value or fallback.
-	*/
-	static #parseNumber(value, fallback) {
-		if (value === null || value === void 0 || `${value}`.trim() === "") return fallback;
-		const number = Number(value);
-		return Number.isFinite(number) ? number : fallback;
-	}
-	/**
 	* Creates a StarRating.
 	* @param {HTMLInputElement} node The numeric input node.
 	* @param {StarRatingOptions} [options] The StarRating options.
@@ -73,7 +76,6 @@ var StarRating = class StarRating extends BaseComponent {
 		this.#refresh();
 		this.#refreshDisabled();
 		this.#events();
-		if (this.options.tooltip) this.#tooltipEvents();
 	}
 	/**
 	* Disables the StarRating.
@@ -136,21 +138,7 @@ var StarRating = class StarRating extends BaseComponent {
 		$.triggerEvent(this.node, "change.ui.starrating", { data: { skipUpdate: true } });
 	}
 	/**
-	* Completes an active pointer drag.
-	* @param {MouseEvent|TouchEvent} e The pointer end event.
-	*/
-	#endDrag(e) {
-		if (!this.node || !this.#dragging) return;
-		const value = this.#getEventValue(e);
-		if (value !== null) this.setValue(value);
-		else this.#refresh();
-		this.#dragging = false;
-		this.#triggerTooltip("drag", false);
-		$.rect(this.#filledContainer);
-		$.setStyle(this.#filledContainer, { transition: "" });
-	}
-	/**
-	* Attaches input, keyboard, pointer, and hover events.
+	* Attaches input, keyboard, pointer, hover, and tooltip events.
 	*/
 	#events() {
 		if (this.#form) {
@@ -167,6 +155,20 @@ var StarRating = class StarRating extends BaseComponent {
 		$.addEvent(this.node, "change.ui.starrating", (e) => {
 			if (!e.skipUpdate) this.#refresh();
 		});
+		if (this.options.tooltip) {
+			$.addEvent(this.#container, "mouseenter.ui.starrating", (_) => {
+				this.#triggerTooltip("hover");
+			});
+			$.addEvent(this.#container, "mouseleave.ui.starrating", (_) => {
+				this.#triggerTooltip("hover", false);
+			});
+			$.addEvent(this.#container, "focus.ui.starrating", (_) => {
+				this.#triggerTooltip("focus");
+			});
+			$.addEvent(this.#container, "blur.ui.starrating", (_) => {
+				this.#triggerTooltip("focus", false);
+			});
+		}
 		if (this.#displayOnly) return;
 		$.addEvent(this.#container, "keydown.ui.starrating", (e) => {
 			if ($.is(this.node, ":disabled")) return;
@@ -202,13 +204,51 @@ var StarRating = class StarRating extends BaseComponent {
 			e.preventDefault();
 			this.setValue(value);
 		});
-		const dragEvent = $.mouseDragFactory((e) => this.#startDrag(e), (e) => this.#moveDrag(e), (e) => this.#endDrag(e), {
+		const dragEvent = $.mouseDragFactory((e) => {
+			if (!this.node || e.type === "mousedown" && e.button !== 0 || $.is(this.node, ":disabled")) return false;
+			const value = this.#getEventValue(e);
+			if (value === null) return false;
+			this.#dragging = true;
+			$.focus(this.#container);
+			$.setStyle(this.#filledContainer, { transition: "none" });
+			this.setValue(value);
+			if (!this.#dragging) return false;
+			this.#triggerTooltip("drag");
+		}, (e) => {
+			if (!this.node || !this.#dragging) return;
+			if (e.cancelable) e.preventDefault();
+			const value = this.#getEventValue(e);
+			if (value !== null) this.setValue(value);
+		}, (e) => {
+			if (!this.node || !this.#dragging) return;
+			const value = this.#getEventValue(e);
+			if (value !== null) this.setValue(value);
+			else this.#refresh();
+			this.#dragging = false;
+			this.#triggerTooltip("drag", false);
+			$.rect(this.#filledContainer);
+			$.setStyle(this.#filledContainer, { transition: "" });
+		}, {
 			debounce: false,
 			passive: false,
 			preventDefault: false
 		});
 		$.addEvent(this.#container, "mousedown.ui.starrating touchstart.ui.starrating", dragEvent);
-		if (this.options.hover) this.#hoverEvents();
+		if (this.options.hover) {
+			$.addEvent(this.#container, "mousemove.ui.starrating", $.debounce((e) => {
+				if (!this.node || this.#dragging || $.is(this.node, ":disabled")) return;
+				const value = this.#getEventValue(e);
+				if (value === null) return;
+				$.setStyle(this.#filledContainer, { transition: "none" });
+				this.#setDisplayedValue(value, { updateAria: false });
+				$.rect(this.#filledContainer);
+				$.setStyle(this.#filledContainer, { transition: "" });
+			}), { passive: true });
+			$.addEvent(this.#container, "mouseleave.ui.starrating", (_) => {
+				if (!this.node || this.#dragging || $.is(this.node, ":disabled")) return;
+				this.#refresh();
+			});
+		}
 	}
 	/**
 	* Gets a normalized rating from a pointer event.
@@ -224,60 +264,23 @@ var StarRating = class StarRating extends BaseComponent {
 		return this.#normalizeValue($._lerp(0, this.#stars, percentX / 100));
 	}
 	/**
-	* Gets the fill percentage for a rating.
-	* @param {number|null} value The rating.
-	* @returns {number} The fill percentage.
-	*/
-	#getPercent(value) {
-		value ??= this.#min;
-		return $._clamp($._inverseLerp(0, this.#stars, value) * 100, 0, 100);
-	}
-	/**
-	* Attaches pointer preview events.
-	*/
-	#hoverEvents() {
-		$.addEvent(this.#container, "mousemove.ui.starrating", $.debounce((e) => {
-			if (!this.node || this.#dragging || $.is(this.node, ":disabled")) return;
-			const value = this.#getEventValue(e);
-			if (value === null) return;
-			$.setStyle(this.#filledContainer, { transition: "none" });
-			this.#setDisplayedValue(value, { updateAria: false });
-			$.rect(this.#filledContainer);
-			$.setStyle(this.#filledContainer, { transition: "" });
-		}), { passive: true });
-		$.addEvent(this.#container, "mouseleave.ui.starrating", (_) => {
-			if (!this.node || this.#dragging || $.is(this.node, ":disabled")) return;
-			this.#refresh();
-		});
-	}
-	/**
-	* Updates the rating during an active pointer drag.
-	* @param {MouseEvent|TouchEvent} e The pointer move event.
-	*/
-	#moveDrag(e) {
-		if (!this.node || !this.#dragging) return;
-		if (e.cancelable) e.preventDefault();
-		const value = this.#getEventValue(e);
-		if (value !== null) this.setValue(value);
-	}
-	/**
 	* Normalizes native attributes and component options without mutating options.
 	*/
 	#normalizeOptions() {
-		const configuredStars = StarRating.#parseNumber(this.options.stars, 5);
+		const configuredStars = parseNumber(this.options.stars, 5);
 		this.#stars = Math.max(1, Math.trunc(configuredStars));
 		const minAttribute = $.getAttribute(this.node, "min");
-		const optionMin = StarRating.#parseNumber(this.options.min, 0);
-		const configuredMin = StarRating.#parseNumber(minAttribute, optionMin);
+		const optionMin = parseNumber(this.options.min, 0);
+		const configuredMin = parseNumber(minAttribute, optionMin);
 		this.#min = $._clamp(configuredMin, 0, this.#stars);
 		const maxAttribute = $.getAttribute(this.node, "max");
-		const optionMax = StarRating.#parseNumber(this.options.max, this.#stars);
-		const configuredMax = StarRating.#parseNumber(maxAttribute, optionMax);
+		const optionMax = parseNumber(this.options.max, this.#stars);
+		const configuredMax = parseNumber(maxAttribute, optionMax);
 		this.#max = $._clamp(configuredMax, this.#min, this.#stars);
 		const stepAttribute = $.getAttribute(this.node, "step");
-		const step = StarRating.#parseNumber(stepAttribute ?? this.options.step, NaN);
+		const step = parseNumber(stepAttribute ?? this.options.step, NaN);
 		this.#step = step > 0 ? step : null;
-		this.#precision = Math.max(StarRating.#getDecimalPlaces(this.#min), StarRating.#getDecimalPlaces(this.#max), this.#step === null ? 0 : StarRating.#getDecimalPlaces(this.#step));
+		this.#precision = Math.max(getDecimalPlaces(this.#min), getDecimalPlaces(this.#max), this.#step === null ? 0 : getDecimalPlaces(this.#step));
 		this.#displayOnly = Boolean(this.options.displayOnly || $.getProperty(this.node, "readOnly"));
 	}
 	/**
@@ -286,7 +289,7 @@ var StarRating = class StarRating extends BaseComponent {
 	* @returns {number|null} The normalized rating, or `null` for invalid input.
 	*/
 	#normalizeValue(value) {
-		value = StarRating.#parseNumber(value, NaN);
+		value = parseNumber(value, NaN);
 		if (!Number.isFinite(value)) return null;
 		value = $._clamp(value, this.#min, this.#max);
 		if (this.#step !== null && value !== this.#min && value !== this.#max) {
@@ -399,8 +402,8 @@ var StarRating = class StarRating extends BaseComponent {
 	* @param {boolean} [options.updateAria=true] Whether to update slider ARIA values.
 	*/
 	#setDisplayedValue(value, { updateAria = true } = {}) {
-		$.setStyle(this.#filledContainer, { width: `${this.#getPercent(value)}%` });
 		value ??= this.#min;
+		$.setStyle(this.#filledContainer, { width: `${$._clamp(value / this.#stars * 100, 0, 100)}%` });
 		const ratingText = this.options.ratingText.call(this, value);
 		if (updateAria) $.setAttribute(this.#container, {
 			"aria-valuenow": value,
@@ -411,39 +414,6 @@ var StarRating = class StarRating extends BaseComponent {
 			this.#tooltip.refresh();
 			this.#tooltip.update();
 		}
-	}
-	/**
-	* Starts a mouse or touch drag and sets the rating at the pointer position.
-	* @param {MouseEvent|TouchEvent} e The pointer down event.
-	* @returns {boolean|undefined} `false` when the drag must not start.
-	*/
-	#startDrag(e) {
-		if (!this.node || e.type === "mousedown" && e.button !== 0 || $.is(this.node, ":disabled")) return false;
-		const value = this.#getEventValue(e);
-		if (value === null) return false;
-		this.#dragging = true;
-		$.focus(this.#container);
-		$.setStyle(this.#filledContainer, { transition: "none" });
-		this.setValue(value);
-		if (!this.#dragging) return false;
-		this.#triggerTooltip("drag");
-	}
-	/**
-	* Attaches hover and focus tooltip events.
-	*/
-	#tooltipEvents() {
-		$.addEvent(this.#container, "mouseenter.ui.starrating", (_) => {
-			this.#triggerTooltip("hover");
-		});
-		$.addEvent(this.#container, "mouseleave.ui.starrating", (_) => {
-			this.#triggerTooltip("hover", false);
-		});
-		$.addEvent(this.#container, "focus.ui.starrating", (_) => {
-			this.#triggerTooltip("focus");
-		});
-		$.addEvent(this.#container, "blur.ui.starrating", (_) => {
-			this.#triggerTooltip("focus", false);
-		});
 	}
 	/**
 	* Shows or hides the tooltip for one interaction source.

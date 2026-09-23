@@ -454,8 +454,7 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 		/**
 		* Updates the rendered fill and accessible rating text.
 		* @param {number|null} value The rating to render.
-		* @param {object} [options] The update options.
-		* @param {boolean} [options.updateAria=true] Whether to update slider ARIA values.
+		* @param {{updateAria?: boolean}} [options] The update options. ARIA updates default to `true`.
 		*/
 		#setDisplayedValue(value, { updateAria = true } = {}) {
 			value ??= this.#min;

@@ -1,6 +1,8 @@
 import $ from '@fr0st/query';
 import { BaseComponent, generateId, getPosition, Tooltip } from '@fr0st/ui';
 
+const window = $.getWindow();
+
 /**
  * @typedef {object} StarRatingOptions
  * @property {boolean} [animate=true] Whether to animate rating changes.
@@ -24,12 +26,14 @@ export default class StarRating extends BaseComponent {
     #displayOnly = false;
     #dragging = false;
     #filledContainer;
+    #form;
     #generatedLabelIds = new Map;
     #hidden;
     #max = 5;
     #min = 0;
     #outerContainer;
     #precision = 0;
+    #resetHandler;
     #rtl = false;
     #stars = 5;
     #step = 1;
@@ -77,6 +81,8 @@ export default class StarRating extends BaseComponent {
     constructor(node, options) {
         super(node, options);
 
+        this.#form = this.node.form;
+
         this.#normalizeOptions();
         this.#render();
         this.#refresh();
@@ -93,6 +99,11 @@ export default class StarRating extends BaseComponent {
      */
     disable() {
         $.setAttribute(this.node, { disabled: true });
+
+        if (this.#dragging) {
+            this.#resetState();
+        }
+
         this.#refreshDisabled();
     }
 
@@ -114,6 +125,10 @@ export default class StarRating extends BaseComponent {
         $.removeEvent(this.node, 'change.ui.starrating');
         $.removeEvent(this.node, 'focus.ui.starrating');
 
+        if (this.#form) {
+            $.removeEvent(this.#form, 'reset.ui.starrating', this.#resetHandler);
+        }
+
         if (this.#hidden) {
             $.addClass(this.node, this.constructor.classes.hide);
         } else {
@@ -128,8 +143,10 @@ export default class StarRating extends BaseComponent {
 
         this.#container = null;
         this.#filledContainer = null;
+        this.#form = null;
         this.#generatedLabelIds = null;
         this.#outerContainer = null;
+        this.#resetHandler = null;
         this.#tooltip = null;
         this.#tooltipTriggers = null;
 
@@ -212,6 +229,19 @@ export default class StarRating extends BaseComponent {
      * Attaches input, keyboard, pointer, and hover events.
      */
     #events() {
+        if (this.#form) {
+            this.#resetHandler = (event) => {
+                // Read the value after the browser completes its native reset.
+                window.setTimeout(() => {
+                    if (this.node && !event.defaultPrevented) {
+                        this.#resetState();
+                    }
+                }, 0);
+            };
+
+            $.addEvent(this.#form, 'reset.ui.starrating', this.#resetHandler);
+        }
+
         $.addEvent(this.node, 'focus.ui.starrating', (_) => {
             $.focus(this.#container);
         });
@@ -613,6 +643,20 @@ export default class StarRating extends BaseComponent {
     }
 
     /**
+     * Restores the rendered value from the input and cancels an active drag.
+     */
+    #resetState() {
+        this.#dragging = false;
+
+        $.setStyle(this.#filledContainer, { transition: 'none' });
+        this.#refresh();
+        $.rect(this.#filledContainer);
+        $.setStyle(this.#filledContainer, { transition: '' });
+
+        this.#triggerTooltip('drag', false);
+    }
+
+    /**
      * Updates the rendered fill and accessible rating text.
      * @param {number|null} value The rating to render.
      * @param {object} [options] The update options.
@@ -669,6 +713,12 @@ export default class StarRating extends BaseComponent {
         $.focus(this.#container);
         $.setStyle(this.#filledContainer, { transition: 'none' });
         this.setValue(value);
+
+        // A change handler may disable or dispose the control synchronously.
+        if (!this.#dragging) {
+            return false;
+        }
+
         this.#triggerTooltip('drag');
     }
 

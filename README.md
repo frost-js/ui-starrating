@@ -267,6 +267,8 @@ $.addEvent(
 
 The underlying event type is `change`; fQuery exposes `event.namespace` as `ui.starrating`. Setting or selecting the current normalized value again does not emit another event. Hover preview changes only the visible fill and tooltip; it does not commit a value or change the slider's accessible value. A change event dispatched on the input refreshes the rendered control from the native value.
 
+Native form resets refresh the visible rating, accessible value, and tooltip after the browser restores the input, without emitting a change event. Canceled resets leave the current interaction intact. Calling `disable()` during a drag stops the drag and preserves the latest committed value.
+
 ## fQuery API
 
 Importing StarRating registers `starrating` on `fQuery.QuerySet`:

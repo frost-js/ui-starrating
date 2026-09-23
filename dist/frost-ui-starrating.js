@@ -34,7 +34,8 @@ Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
 _fr0st_query = __toESM(_fr0st_query, 1);
 
 //#region src/js/star-rating.js
-/**
+	var window = _fr0st_query.default.getWindow();
+	/**
 	* @typedef {object} StarRatingOptions
 	* @property {boolean} [animate=true] Whether to animate rating changes.
 	* @property {boolean} [displayOnly=false] Whether the rating is read-only.
@@ -56,12 +57,14 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 		#displayOnly = false;
 		#dragging = false;
 		#filledContainer;
+		#form;
 		#generatedLabelIds = /* @__PURE__ */ new Map();
 		#hidden;
 		#max = 5;
 		#min = 0;
 		#outerContainer;
 		#precision = 0;
+		#resetHandler;
 		#rtl = false;
 		#stars = 5;
 		#step = 1;
@@ -96,6 +99,7 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 		*/
 		constructor(node, options) {
 			super(node, options);
+			this.#form = this.node.form;
 			this.#normalizeOptions();
 			this.#render();
 			this.#refresh();
@@ -108,6 +112,7 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 		*/
 		disable() {
 			_fr0st_query.default.setAttribute(this.node, { disabled: true });
+			if (this.#dragging) this.#resetState();
 			this.#refreshDisabled();
 		}
 		/** @inheritdoc */
@@ -118,14 +123,17 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 			_fr0st_query.default.remove(this.#outerContainer);
 			_fr0st_query.default.removeEvent(this.node, "change.ui.starrating");
 			_fr0st_query.default.removeEvent(this.node, "focus.ui.starrating");
+			if (this.#form) _fr0st_query.default.removeEvent(this.#form, "reset.ui.starrating", this.#resetHandler);
 			if (this.#hidden) _fr0st_query.default.addClass(this.node, this.constructor.classes.hide);
 			else _fr0st_query.default.removeClass(this.node, this.constructor.classes.hide);
 			if (this.#tabIndex === null) _fr0st_query.default.removeAttribute(this.node, "tabindex");
 			else _fr0st_query.default.setAttribute(this.node, { tabindex: this.#tabIndex });
 			this.#container = null;
 			this.#filledContainer = null;
+			this.#form = null;
 			this.#generatedLabelIds = null;
 			this.#outerContainer = null;
+			this.#resetHandler = null;
 			this.#tooltip = null;
 			this.#tooltipTriggers = null;
 			super.dispose();
@@ -177,6 +185,14 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 		* Attaches input, keyboard, pointer, and hover events.
 		*/
 		#events() {
+			if (this.#form) {
+				this.#resetHandler = (event) => {
+					window.setTimeout(() => {
+						if (this.node && !event.defaultPrevented) this.#resetState();
+					}, 0);
+				};
+				_fr0st_query.default.addEvent(this.#form, "reset.ui.starrating", this.#resetHandler);
+			}
 			_fr0st_query.default.addEvent(this.node, "focus.ui.starrating", (_) => {
 				_fr0st_query.default.focus(this.#container);
 			});
@@ -406,6 +422,17 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 			});
 		}
 		/**
+		* Restores the rendered value from the input and cancels an active drag.
+		*/
+		#resetState() {
+			this.#dragging = false;
+			_fr0st_query.default.setStyle(this.#filledContainer, { transition: "none" });
+			this.#refresh();
+			_fr0st_query.default.rect(this.#filledContainer);
+			_fr0st_query.default.setStyle(this.#filledContainer, { transition: "" });
+			this.#triggerTooltip("drag", false);
+		}
+		/**
 		* Updates the rendered fill and accessible rating text.
 		* @param {number|null} value The rating to render.
 		* @param {object} [options] The update options.
@@ -439,6 +466,7 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 			_fr0st_query.default.focus(this.#container);
 			_fr0st_query.default.setStyle(this.#filledContainer, { transition: "none" });
 			this.setValue(value);
+			if (!this.#dragging) return false;
 			this.#triggerTooltip("drag");
 		}
 		/**

@@ -321,10 +321,8 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 			value = _fr0st_query.default._clamp(value, this.#min, this.#max);
 			if (this.#step !== null && value !== this.#min && value !== this.#max) {
 				const steps = (value - this.#min) / this.#step;
-				if (Number.isFinite(steps)) {
-					const tolerance = Number.EPSILON * Math.max(1, Math.abs(steps));
-					value = this.#min + Math.ceil(steps - tolerance) * this.#step;
-				}
+				const tolerance = Number.EPSILON * Math.max(1, Math.abs(steps));
+				if (tolerance < .5) value = this.#min + Math.ceil(steps - tolerance) * this.#step;
 			}
 			if (this.#step !== null && this.#precision <= 100) value = Number(value.toFixed(this.#precision));
 			return _fr0st_query.default._clamp(value, this.#min, this.#max);

@@ -451,9 +451,10 @@ export default class StarRating extends BaseComponent {
             value !== this.#max
         ) {
             const steps = (value - this.#min) / this.#step;
+            const tolerance = Number.EPSILON * Math.max(1, Math.abs(steps));
 
-            if (Number.isFinite(steps)) {
-                const tolerance = Number.EPSILON * Math.max(1, Math.abs(steps));
+            // Preserve the value when the step count is too imprecise to snap reliably.
+            if (tolerance < .5) {
                 value = this.#min + (Math.ceil(steps - tolerance) * this.#step);
             }
         }

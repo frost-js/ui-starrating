@@ -995,22 +995,37 @@ test.describe('StarRating', () => {
             );
         });
 
-        test('preserves valid ratings when a tiny step overflows the step count', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setAttribute('#rating', { step: '1e-320', value: '2' });
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+        for (const step of ['1e-320', '1e-20', '5e-16']) {
+            test(`preserves valid ratings without drift for step ${step}`, async ({ page }) => {
+                await page.evaluate((step) => {
+                    $.setAttribute('#rating', { step, value: '2' });
+                    UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+                    window.tinyStepChanges = 0;
+                    $.addEvent('#rating', 'change.ui.starrating', (_) => window.tinyStepChanges++);
+                }, step);
+
+                await expect(page.locator('#rating')).toHaveValue('2');
+                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2');
+                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuetext', '2 stars');
+                await expect(page.locator('.starrating-filled')).toHaveAttribute('style', /width: 40%/);
+
+                await page.evaluate((_) => $.getData('#rating', 'starrating').setValue(2));
+                await expect(page.locator('#rating')).toHaveValue('2');
+                expect(await page.evaluate((_) => window.tinyStepChanges)).toBe(0);
+
+                await page.evaluate((_) => {
+                    const rating = $.getData('#rating', 'starrating');
+                    rating.setValue(3.5);
+                    rating.setValue(3.5);
+                });
+
+                await expect(page.locator('#rating')).toHaveValue('3.5');
+                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '3.5');
+                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuetext', '3.5 stars');
+                await expect(page.locator('.starrating-filled')).toHaveAttribute('style', /width: 70%/);
+                expect(await page.evaluate((_) => window.tinyStepChanges)).toBe(1);
             });
-
-            await expect(page.locator('#rating')).toHaveValue('2');
-            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2');
-            await expect(page.locator('.starrating-filled')).toHaveAttribute('style', /width: 40%/);
-
-            await page.evaluate((_) => $.getData('#rating', 'starrating').setValue(3.5));
-
-            await expect(page.locator('#rating')).toHaveValue('3.5');
-            await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '3.5');
-            await expect(page.locator('.starrating-filled')).toHaveAttribute('style', /width: 70%/);
-        });
+        }
 
         test('preserves unrestricted fractional values for step any', async ({ page }) => {
             await page.evaluate((_) => {

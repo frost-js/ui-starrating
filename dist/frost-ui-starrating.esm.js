@@ -268,19 +268,15 @@ var StarRating = class StarRating extends BaseComponent {
 		this.#stars = Math.max(1, Math.trunc(configuredStars));
 		const minAttribute = $.getAttribute(this.node, "min");
 		const optionMin = StarRating.#parseNumber(this.options.min, 0);
-		const configuredMin = minAttribute === null ? optionMin : StarRating.#parseNumber(minAttribute, optionMin);
+		const configuredMin = StarRating.#parseNumber(minAttribute, optionMin);
 		this.#min = $._clamp(configuredMin, 0, this.#stars);
 		const maxAttribute = $.getAttribute(this.node, "max");
-		const optionMax = this.options.max === null ? this.#stars : StarRating.#parseNumber(this.options.max, this.#stars);
-		const configuredMax = maxAttribute === null ? optionMax : StarRating.#parseNumber(maxAttribute, optionMax);
+		const optionMax = StarRating.#parseNumber(this.options.max, this.#stars);
+		const configuredMax = StarRating.#parseNumber(maxAttribute, optionMax);
 		this.#max = $._clamp(configuredMax, this.#min, this.#stars);
 		const stepAttribute = $.getAttribute(this.node, "step");
-		const configuredStep = stepAttribute === null ? this.options.step : stepAttribute;
-		if (`${configuredStep}`.trim().toLowerCase() === "any") this.#step = null;
-		else {
-			const step = StarRating.#parseNumber(configuredStep, NaN);
-			this.#step = Number.isFinite(step) && step > 0 ? step : null;
-		}
+		const step = StarRating.#parseNumber(stepAttribute ?? this.options.step, NaN);
+		this.#step = step > 0 ? step : null;
 		this.#precision = Math.max(StarRating.#getDecimalPlaces(this.#min), StarRating.#getDecimalPlaces(this.#max), this.#step === null ? 0 : StarRating.#getDecimalPlaces(this.#step));
 		this.#displayOnly = Boolean(this.options.displayOnly || $.getProperty(this.node, "readOnly"));
 	}
@@ -364,19 +360,13 @@ var StarRating = class StarRating extends BaseComponent {
 			class: [this.constructor.classes.container, `starrating-${this.options.size}`],
 			attributes
 		});
-		const outline = [];
-		const filled = [];
-		for (let i = 0; i < this.#stars; i++) {
-			outline.push(this.constructor.icons.outline);
-			filled.push(this.constructor.icons.filled);
-		}
 		const outlineContainer = $.create("div", {
 			class: this.constructor.classes.outline,
-			html: outline.join("")
+			html: this.constructor.icons.outline.repeat(this.#stars)
 		});
 		this.#filledContainer = $.create("div", {
 			class: this.constructor.classes.filled,
-			html: filled.join("")
+			html: this.constructor.icons.filled.repeat(this.#stars)
 		});
 		$.append(this.#container, outlineContainer);
 		$.append(this.#container, this.#filledContainer);
@@ -407,9 +397,8 @@ var StarRating = class StarRating extends BaseComponent {
 	* @param {number|null} value The rating to render.
 	* @param {object} [options] The update options.
 	* @param {boolean} [options.updateAria=true] Whether to update slider ARIA values.
-	* @param {boolean} [options.updateTooltip=true] Whether to update the tooltip text.
 	*/
-	#setDisplayedValue(value, { updateAria = true, updateTooltip = true } = {}) {
+	#setDisplayedValue(value, { updateAria = true } = {}) {
 		$.setStyle(this.#filledContainer, { width: `${this.#getPercent(value)}%` });
 		value ??= this.#min;
 		const ratingText = this.options.ratingText.call(this, value);
@@ -417,7 +406,7 @@ var StarRating = class StarRating extends BaseComponent {
 			"aria-valuenow": value,
 			"aria-valuetext": ratingText
 		});
-		if (updateTooltip && this.#tooltip) {
+		if (this.#tooltip) {
 			$.setDataset(this.#container, { uiTitle: ratingText });
 			this.#tooltip.refresh();
 			this.#tooltip.update();

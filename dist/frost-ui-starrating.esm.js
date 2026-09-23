@@ -136,7 +136,7 @@ var StarRating = class extends BaseComponent {
 	/** @inheritdoc */
 	dispose() {
 		this.#dragging = false;
-		for (const [label, id] of this.#generatedLabelIds) if ($.getAttribute(label, "id") === id) $.removeAttribute(label, "id");
+		for (const [label, id] of this.#generatedLabelIds || []) if ($.getAttribute(label, "id") === id) $.removeAttribute(label, "id");
 		if (this.#tooltip) this.#tooltip.dispose();
 		$.remove(this.#outerContainer);
 		$.removeEvent(this.node, "change.ui.starrating");

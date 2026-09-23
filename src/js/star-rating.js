@@ -146,7 +146,7 @@ export default class StarRating extends BaseComponent {
     dispose() {
         this.#dragging = false;
 
-        for (const [label, id] of this.#generatedLabelIds) {
+        for (const [label, id] of this.#generatedLabelIds || []) {
             if ($.getAttribute(label, 'id') === id) {
                 $.removeAttribute(label, 'id');
             }

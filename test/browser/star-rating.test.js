@@ -245,6 +245,22 @@ test.describe('StarRating', () => {
             await expect(labels.nth(1)).toHaveAttribute('id', 'existing');
         });
 
+        test('allows repeated disposal of the same instance', async ({ page }) => {
+            expect(await page.evaluate((_) => {
+                const component = UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+                component.dispose();
+                component.dispose();
+                return {
+                    node: component.node,
+                    options: component.options,
+                    registered: $.hasData('#rating', 'starrating'),
+                };
+            })).toEqual({ node: null, options: null, registered: false });
+
+            await expect(page.locator('.starrating')).toHaveCount(0);
+            await expect(page.locator('#rating')).not.toHaveAttribute('aria-hidden');
+        });
+
         test('can reinitialize after disposal', async ({ page }) => {
             expect(await page.evaluate((_) => {
                 const input = $.findOne('#rating');

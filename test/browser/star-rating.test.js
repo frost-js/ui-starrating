@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
 test.describe('StarRating', () => {
     test.beforeEach(async ({ page }) => {
         await page.evaluate((_) => {
-            $.setHTML(
+            $.setHtml(
                 document.body,
                 '<input id="rating" type="number"><input id="rating2" type="number">',
             );
@@ -137,7 +137,7 @@ test.describe('StarRating', () => {
     test.describe('#dispose', () => {
         test('removes the StarRating and restores the original input', async ({ page }) => {
             await page.evaluate((_) => {
-                $.setHTML(
+                $.setHtml(
                     document.body,
                     '<input class="existing" id="rating" tabindex="4" type="number">',
                 );
@@ -160,7 +160,7 @@ test.describe('StarRating', () => {
 
         test('restores existing hidden and absent tabindex state', async ({ page }) => {
             await page.evaluate((_) => {
-                $.setHTML(
+                $.setHtml(
                     document.body,
                     '<input class="visually-hidden existing" id="rating" type="number">',
                 );
@@ -175,7 +175,7 @@ test.describe('StarRating', () => {
 
         test('restores owned label IDs without removing runtime IDs', async ({ page }) => {
             await page.evaluate((_) => {
-                $.setHTML(
+                $.setHtml(
                     document.body,
                     '<label>Generated <input id="rating" type="number"></label><label id="existing" for="rating">Existing</label>',
                 );
@@ -438,7 +438,7 @@ test.describe('StarRating', () => {
 
         test('normalizes native attributes without changing frozen options', async ({ page }) => {
             await page.evaluate((_) => {
-                $.setHTML(
+                $.setHtml(
                     document.body,
                     '<input id="rating" type="number" min=".1" max="2.1" step=".25" value=".2" readonly required>',
                 );
@@ -510,7 +510,7 @@ test.describe('StarRating', () => {
 
         test('combines existing, wrapping, and multiple label references', async ({ page }) => {
             await page.evaluate((_) => {
-                $.setHTML(
+                $.setHtml(
                     document.body,
                     '<span id="description">Description</span><label id="wrapper">Wrapped <input id="rating" type="number" aria-label="Fallback" aria-labelledby="description"></label><label id="external" for="rating">External</label>',
                 );
@@ -527,7 +527,7 @@ test.describe('StarRating', () => {
 
         test('generates safe IDs for every unlabelled associated label', async ({ page }) => {
             await page.evaluate((_) => {
-                $.setHTML(
+                $.setHtml(
                     document.body,
                     '<label>First</label><label>Second</label><input type="number">',
                 );
@@ -733,7 +733,7 @@ test.describe('StarRating', () => {
 
         test('keeps the page position for handled slider keys', async ({ page }) => {
             await page.evaluate((_) => {
-                $.setHTML(
+                $.setHtml(
                     document.body,
                     '<div style="height: 1200px"></div><input id="rating" type="number" value="2"><div style="height: 1200px"></div>',
                 );
@@ -976,7 +976,7 @@ test.describe('StarRating', () => {
     test.describe('size option', () => {
         test('renders every size and preserves the public size custom property', async ({ page }) => {
             await page.evaluate((_) => {
-                $.setHTML(
+                $.setHtml(
                     document.body,
                     ['xs', 'sm', 'md', 'lg', 'xl']
                         .map((size) => `<input id="${size}" type="number">`)
@@ -1138,7 +1138,7 @@ test.describe('StarRating', () => {
 
         test('handles hidden or zero-width layout without invalid styles', async ({ page }) => {
             await page.evaluate((_) => {
-                $.setHTML(
+                $.setHtml(
                     document.body,
                     '<div hidden><input id="rating" type="number"></div>',
                 );

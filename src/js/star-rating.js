@@ -52,7 +52,40 @@ export default class StarRating extends BaseComponent {
 
         this.#form = this.node.form;
 
-        this.#normalizeOptions();
+        const configuredStars = parseNumber(this.options.stars, 5);
+        this.#stars = Math.max(1, Math.trunc(configuredStars));
+
+        const minAttribute = $.getAttribute(this.node, 'min');
+        const optionMin = parseNumber(this.options.min, 0);
+        const configuredMin = parseNumber(minAttribute, optionMin);
+        this.#min = $._clamp(
+            configuredMin,
+            0,
+            this.#stars,
+        );
+
+        const maxAttribute = $.getAttribute(this.node, 'max');
+        const optionMax = parseNumber(this.options.max, this.#stars);
+        const configuredMax = parseNumber(maxAttribute, optionMax);
+        this.#max = $._clamp(
+            configuredMax,
+            this.#min,
+            this.#stars,
+        );
+
+        const stepAttribute = $.getAttribute(this.node, 'step');
+        const step = parseNumber(stepAttribute ?? this.options.step, NaN);
+        this.#step = step > 0 ? step : null;
+
+        this.#precision = Math.max(
+            getDecimalPlaces(this.#min),
+            getDecimalPlaces(this.#max),
+            this.#step === null ? 0 : getDecimalPlaces(this.#step),
+        );
+        this.#displayOnly = Boolean(
+            this.options.displayOnly || $.getProperty(this.node, 'readOnly'),
+        );
+
         this.#render();
         this.#refresh();
         this.#refreshDisabled();
@@ -393,45 +426,6 @@ export default class StarRating extends BaseComponent {
 
         return this.#normalizeValue(
             $._lerp(0, this.#stars, percentX / 100),
-        );
-    }
-
-    /**
-     * Normalizes native attributes and component options without mutating options.
-     */
-    #normalizeOptions() {
-        const configuredStars = parseNumber(this.options.stars, 5);
-        this.#stars = Math.max(1, Math.trunc(configuredStars));
-
-        const minAttribute = $.getAttribute(this.node, 'min');
-        const optionMin = parseNumber(this.options.min, 0);
-        const configuredMin = parseNumber(minAttribute, optionMin);
-        this.#min = $._clamp(
-            configuredMin,
-            0,
-            this.#stars,
-        );
-
-        const maxAttribute = $.getAttribute(this.node, 'max');
-        const optionMax = parseNumber(this.options.max, this.#stars);
-        const configuredMax = parseNumber(maxAttribute, optionMax);
-        this.#max = $._clamp(
-            configuredMax,
-            this.#min,
-            this.#stars,
-        );
-
-        const stepAttribute = $.getAttribute(this.node, 'step');
-        const step = parseNumber(stepAttribute ?? this.options.step, NaN);
-        this.#step = step > 0 ? step : null;
-
-        this.#precision = Math.max(
-            getDecimalPlaces(this.#min),
-            getDecimalPlaces(this.#max),
-            this.#step === null ? 0 : getDecimalPlaces(this.#step),
-        );
-        this.#displayOnly = Boolean(
-            this.options.displayOnly || $.getProperty(this.node, 'readOnly'),
         );
     }
 

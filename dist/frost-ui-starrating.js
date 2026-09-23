@@ -103,7 +103,21 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 		constructor(node, options) {
 			super(node, options);
 			this.#form = this.node.form;
-			this.#normalizeOptions();
+			const configuredStars = parseNumber(this.options.stars, 5);
+			this.#stars = Math.max(1, Math.trunc(configuredStars));
+			const minAttribute = _fr0st_query.default.getAttribute(this.node, "min");
+			const optionMin = parseNumber(this.options.min, 0);
+			const configuredMin = parseNumber(minAttribute, optionMin);
+			this.#min = _fr0st_query.default._clamp(configuredMin, 0, this.#stars);
+			const maxAttribute = _fr0st_query.default.getAttribute(this.node, "max");
+			const optionMax = parseNumber(this.options.max, this.#stars);
+			const configuredMax = parseNumber(maxAttribute, optionMax);
+			this.#max = _fr0st_query.default._clamp(configuredMax, this.#min, this.#stars);
+			const stepAttribute = _fr0st_query.default.getAttribute(this.node, "step");
+			const step = parseNumber(stepAttribute ?? this.options.step, NaN);
+			this.#step = step > 0 ? step : null;
+			this.#precision = Math.max(getDecimalPlaces(this.#min), getDecimalPlaces(this.#max), this.#step === null ? 0 : getDecimalPlaces(this.#step));
+			this.#displayOnly = Boolean(this.options.displayOnly || _fr0st_query.default.getProperty(this.node, "readOnly"));
 			this.#render();
 			this.#refresh();
 			this.#refreshDisabled();
@@ -294,26 +308,6 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 			if (!Number.isFinite(percentX)) return null;
 			if (this.#rtl) percentX = 100 - percentX;
 			return this.#normalizeValue(_fr0st_query.default._lerp(0, this.#stars, percentX / 100));
-		}
-		/**
-		* Normalizes native attributes and component options without mutating options.
-		*/
-		#normalizeOptions() {
-			const configuredStars = parseNumber(this.options.stars, 5);
-			this.#stars = Math.max(1, Math.trunc(configuredStars));
-			const minAttribute = _fr0st_query.default.getAttribute(this.node, "min");
-			const optionMin = parseNumber(this.options.min, 0);
-			const configuredMin = parseNumber(minAttribute, optionMin);
-			this.#min = _fr0st_query.default._clamp(configuredMin, 0, this.#stars);
-			const maxAttribute = _fr0st_query.default.getAttribute(this.node, "max");
-			const optionMax = parseNumber(this.options.max, this.#stars);
-			const configuredMax = parseNumber(maxAttribute, optionMax);
-			this.#max = _fr0st_query.default._clamp(configuredMax, this.#min, this.#stars);
-			const stepAttribute = _fr0st_query.default.getAttribute(this.node, "step");
-			const step = parseNumber(stepAttribute ?? this.options.step, NaN);
-			this.#step = step > 0 ? step : null;
-			this.#precision = Math.max(getDecimalPlaces(this.#min), getDecimalPlaces(this.#max), this.#step === null ? 0 : getDecimalPlaces(this.#step));
-			this.#displayOnly = Boolean(this.options.displayOnly || _fr0st_query.default.getProperty(this.node, "readOnly"));
 		}
 		/**
 		* Clamps and snaps a rating to the effective range and step.

@@ -76,6 +76,7 @@ var StarRating = class extends BaseComponent {
 		star: "star",
 		stars: "stars"
 	};
+	#ariaHidden;
 	#container;
 	#displayOnly = false;
 	#dragging = false;
@@ -117,10 +118,12 @@ var StarRating = class extends BaseComponent {
 		this.#step = step > 0 ? step : null;
 		this.#precision = Math.max(getDecimalPlaces(this.#min), getDecimalPlaces(this.#max), this.#step === null ? 0 : getDecimalPlaces(this.#step));
 		this.#displayOnly = Boolean(this.options.displayOnly || $.getProperty(this.node, "readOnly"));
+		const focused = $.is(this.node, ":focus");
 		this.#render();
 		this.#refresh();
 		this.#refreshDisabled();
 		this.#events();
+		if (focused) $.focus(this.#container);
 	}
 	/**
 	* Disables the StarRating.
@@ -141,6 +144,8 @@ var StarRating = class extends BaseComponent {
 		if (this.#form) $.removeEvent(this.#form, "reset.ui.starrating", this.#resetHandler);
 		if (this.#hidden) $.addClass(this.node, this.constructor.classes.hide);
 		else $.removeClass(this.node, this.constructor.classes.hide);
+		if (this.#ariaHidden === null) $.removeAttribute(this.node, "aria-hidden");
+		else $.setAttribute(this.node, { "aria-hidden": this.#ariaHidden });
 		if (this.#tabIndex === null) $.removeAttribute(this.node, "tabindex");
 		else $.setAttribute(this.node, { tabindex: this.#tabIndex });
 		this.#container = null;
@@ -353,6 +358,7 @@ var StarRating = class extends BaseComponent {
 	#render() {
 		this.#hidden = $.hasClass(this.node, this.constructor.classes.hide);
 		this.#tabIndex = $.getAttribute(this.node, "tabindex");
+		this.#ariaHidden = $.getAttribute(this.node, "aria-hidden");
 		const labelledBy = /* @__PURE__ */ new Set();
 		const inputLabelledBy = $.getAttribute(this.node, "aria-labelledby");
 		if (inputLabelledBy) {
@@ -399,7 +405,10 @@ var StarRating = class extends BaseComponent {
 		$.append(this.#container, this.#filledContainer);
 		$.append(this.#outerContainer, this.#container);
 		$.addClass(this.node, this.constructor.classes.hide);
-		$.setAttribute(this.node, { tabindex: -1 });
+		$.setAttribute(this.node, {
+			"tabindex": -1,
+			"aria-hidden": true
+		});
 		$.before(this.node, this.#outerContainer);
 		this.#rtl = $.css(this.#container, "direction") === "rtl";
 		if (this.options.tooltip) this.#tooltip = Tooltip.init(this.#container, {

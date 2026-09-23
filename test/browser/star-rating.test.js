@@ -189,6 +189,28 @@ test.describe('StarRating', () => {
             await expect(page.locator('.starrating')).toHaveCount(0);
         });
 
+        for (const ariaHidden of [null, 'false', 'true']) {
+            test(`restores original aria-hidden ${ariaHidden ?? 'absence'} after disposal`, async ({ page }) => {
+                await page.evaluate((ariaHidden) => {
+                    const input = document.querySelector('#rating');
+                    if (ariaHidden !== null) {
+                        input.setAttribute('aria-hidden', ariaHidden);
+                    }
+                    UI.StarRating.init(input, { tooltip: false });
+                }, ariaHidden);
+
+                const input = page.locator('#rating');
+                await expect(input).toHaveAttribute('aria-hidden', 'true');
+                await page.evaluate((_) => $.getData('#rating', 'starrating').dispose());
+
+                if (ariaHidden === null) {
+                    await expect(input).not.toHaveAttribute('aria-hidden');
+                } else {
+                    await expect(input).toHaveAttribute('aria-hidden', ariaHidden);
+                }
+            });
+        }
+
         test('restores owned label IDs without removing runtime IDs', async ({ page }) => {
             await page.evaluate((_) => {
                 $.setHtml(
@@ -455,6 +477,34 @@ test.describe('StarRating', () => {
             await expect(input).toHaveClass('visually-hidden');
             await expect(input).toHaveAttribute('tabindex', '-1');
         });
+
+        for (const focused of [false, true]) {
+            test(`exposes one accessible control when initialized ${focused ? 'focused' : 'unfocused'}`, async ({ page }) => {
+                await page.evaluate((focused) => {
+                    document.body.innerHTML = '<button>Other control</button><label for="rating">Rating</label><input id="rating" type="number" value="2">';
+                    const input = document.querySelector('#rating');
+                    const focusTarget = focused ? input : document.querySelector('button');
+                    focusTarget.focus();
+                    UI.StarRating.init(input, { tooltip: false });
+                }, focused);
+
+                const control = page.getByRole('slider', { name: 'Rating' });
+                await expect(control).toHaveCount(1);
+                await expect(control).toHaveAttribute('aria-valuenow', '2');
+                await expect(page.getByRole('spinbutton')).toHaveCount(0);
+                await expect(page.locator('#rating')).toHaveAttribute('aria-hidden', 'true');
+                await expect(focused ? control : page.getByRole('button')).toBeFocused();
+
+                await page.locator('label').click();
+                await expect(control).toBeFocused();
+                await expect(page.getByRole('spinbutton')).toHaveCount(0);
+
+                await page.evaluate((_) => $.getData('#rating', 'starrating').dispose());
+                await expect(page.getByRole('slider')).toHaveCount(0);
+                await expect(page.getByRole('spinbutton', { name: 'Rating' })).toHaveCount(1);
+                await expect(page.locator('#rating')).toHaveValue('2');
+            });
+        }
 
         test('renders default slider ARIA state for an empty value', async ({ page }) => {
             await page.evaluate((_) => {

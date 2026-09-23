@@ -108,6 +108,7 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 			star: "star",
 			stars: "stars"
 		};
+		#ariaHidden;
 		#container;
 		#displayOnly = false;
 		#dragging = false;
@@ -149,10 +150,12 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 			this.#step = step > 0 ? step : null;
 			this.#precision = Math.max(getDecimalPlaces(this.#min), getDecimalPlaces(this.#max), this.#step === null ? 0 : getDecimalPlaces(this.#step));
 			this.#displayOnly = Boolean(this.options.displayOnly || _fr0st_query.default.getProperty(this.node, "readOnly"));
+			const focused = _fr0st_query.default.is(this.node, ":focus");
 			this.#render();
 			this.#refresh();
 			this.#refreshDisabled();
 			this.#events();
+			if (focused) _fr0st_query.default.focus(this.#container);
 		}
 		/**
 		* Disables the StarRating.
@@ -173,6 +176,8 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 			if (this.#form) _fr0st_query.default.removeEvent(this.#form, "reset.ui.starrating", this.#resetHandler);
 			if (this.#hidden) _fr0st_query.default.addClass(this.node, this.constructor.classes.hide);
 			else _fr0st_query.default.removeClass(this.node, this.constructor.classes.hide);
+			if (this.#ariaHidden === null) _fr0st_query.default.removeAttribute(this.node, "aria-hidden");
+			else _fr0st_query.default.setAttribute(this.node, { "aria-hidden": this.#ariaHidden });
 			if (this.#tabIndex === null) _fr0st_query.default.removeAttribute(this.node, "tabindex");
 			else _fr0st_query.default.setAttribute(this.node, { tabindex: this.#tabIndex });
 			this.#container = null;
@@ -385,6 +390,7 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 		#render() {
 			this.#hidden = _fr0st_query.default.hasClass(this.node, this.constructor.classes.hide);
 			this.#tabIndex = _fr0st_query.default.getAttribute(this.node, "tabindex");
+			this.#ariaHidden = _fr0st_query.default.getAttribute(this.node, "aria-hidden");
 			const labelledBy = /* @__PURE__ */ new Set();
 			const inputLabelledBy = _fr0st_query.default.getAttribute(this.node, "aria-labelledby");
 			if (inputLabelledBy) {
@@ -431,7 +437,10 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 			_fr0st_query.default.append(this.#container, this.#filledContainer);
 			_fr0st_query.default.append(this.#outerContainer, this.#container);
 			_fr0st_query.default.addClass(this.node, this.constructor.classes.hide);
-			_fr0st_query.default.setAttribute(this.node, { tabindex: -1 });
+			_fr0st_query.default.setAttribute(this.node, {
+				"tabindex": -1,
+				"aria-hidden": true
+			});
 			_fr0st_query.default.before(this.node, this.#outerContainer);
 			this.#rtl = _fr0st_query.default.css(this.#container, "direction") === "rtl";
 			if (this.options.tooltip) this.#tooltip = _fr0st_ui.Tooltip.init(this.#container, {

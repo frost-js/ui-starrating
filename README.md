@@ -243,7 +243,7 @@ rating.dispose();
 
 An instance exposes its original input as `instance.node` and its frozen resolved configuration as `instance.options`. Both become `null` after disposal.
 
-`dispose()` restores the input's original visually-hidden state and `tabindex`, preserves its current value and disabled state and unrelated classes, and removes generated label IDs only if the application has not changed them. The input can then be initialized again with new options. Removing the original input through fQuery also disposes the component automatically.
+`dispose()` restores the input's original visually-hidden state, `aria-hidden`, and `tabindex`, preserves its current value and disabled state and unrelated classes, and removes generated label IDs only if the application has not changed them. The input can then be initialized again with new options. Removing the original input through fQuery also disposes the component automatically.
 
 ## Events
 
@@ -301,7 +301,7 @@ Pass an options object to initialize every matched input, or pass a public metho
 - Explicit labels, wrapping labels, multiple labels, and existing `aria-labelledby` references contribute to the rendered slider's accessible name.
 - An input `aria-label` is copied when no label references are available.
 - Labels without IDs receive temporary generated IDs while the component is active.
-- The rendered slider enters the tab order while the original input becomes visually hidden and receives `tabindex="-1"`.
+- The rendered slider enters the tab order while the original input becomes visually hidden and receives `aria-hidden="true"` and `tabindex="-1"`, leaving one control exposed to assistive technology. Focus on the original input is forwarded to the slider, including when the input is already focused during initialization.
 - Arrow Up and Arrow Down increase and decrease by one step. Arrow Left and Arrow Right are direction-aware. Page Up and Page Down use the larger of one rating point or one step, subject to step snapping and range limits. Home and End select the effective minimum and maximum.
 - Handled slider keys prevent page scrolling.
 - Disabled ratings leave the tab order and ignore keyboard and pointer interaction.

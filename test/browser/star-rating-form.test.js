@@ -183,3 +183,29 @@ test.describe('StarRating resets during drags', () => {
         });
     }
 });
+
+test.describe('StarRating form submission', () => {
+    test('preserves native validation and submission with the input hidden from assistive technology', async ({ page }) => {
+        await page.evaluate((_) => {
+            $.setHtml(document.body, '<form id="form"><label for="rating">Rating</label><input id="rating" name="rating" type="number" min="1" max="5" step="0.5" required><button type="submit">Submit</button></form>');
+            UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+            window.submittedRating = null;
+            $.findOne('#form').addEventListener('submit', (event) => {
+                event.preventDefault();
+                window.submittedRating = new FormData(event.target).get('rating');
+            });
+        });
+
+        await page.getByRole('button', { name: 'Submit' }).click();
+        expect(await page.evaluate((_) => window.submittedRating)).toBeNull();
+        expect(await page.locator('#rating').evaluate((node) => node.validity.valueMissing)).toBe(true);
+        await expect(page.getByRole('slider', { name: 'Rating' })).toBeFocused();
+        await expect(page.getByRole('spinbutton')).toHaveCount(0);
+
+        await page.evaluate((_) => $.getData('#rating', 'starrating').setValue(2.5));
+        // Avoid Firefox's native validation popup intercepting the next mouse click.
+        await page.getByRole('button', { name: 'Submit' }).press('Enter');
+        expect(await page.evaluate((_) => window.submittedRating)).toBe('2.5');
+        expect(await page.locator('#rating').evaluate((node) => node.validity.valid)).toBe(true);
+    });
+});

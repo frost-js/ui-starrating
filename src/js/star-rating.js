@@ -57,6 +57,7 @@ export default class StarRating extends BaseComponent {
         stars: 'stars',
     };
 
+    #ariaHidden;
     #container;
     #displayOnly = false;
     #dragging = false;
@@ -120,10 +121,16 @@ export default class StarRating extends BaseComponent {
             this.options.displayOnly || $.getProperty(this.node, 'readOnly'),
         );
 
+        const focused = $.is(this.node, ':focus');
+
         this.#render();
         this.#refresh();
         this.#refreshDisabled();
         this.#events();
+
+        if (focused) {
+            $.focus(this.#container);
+        }
     }
 
     /**
@@ -161,6 +168,12 @@ export default class StarRating extends BaseComponent {
             $.addClass(this.node, this.constructor.classes.hide);
         } else {
             $.removeClass(this.node, this.constructor.classes.hide);
+        }
+
+        if (this.#ariaHidden === null) {
+            $.removeAttribute(this.node, 'aria-hidden');
+        } else {
+            $.setAttribute(this.node, { 'aria-hidden': this.#ariaHidden });
         }
 
         if (this.#tabIndex === null) {
@@ -541,6 +554,7 @@ export default class StarRating extends BaseComponent {
     #render() {
         this.#hidden = $.hasClass(this.node, this.constructor.classes.hide);
         this.#tabIndex = $.getAttribute(this.node, 'tabindex');
+        this.#ariaHidden = $.getAttribute(this.node, 'aria-hidden');
 
         const labelledBy = new Set;
         const inputLabelledBy = $.getAttribute(this.node, 'aria-labelledby');
@@ -615,7 +629,10 @@ export default class StarRating extends BaseComponent {
         $.append(this.#outerContainer, this.#container);
 
         $.addClass(this.node, this.constructor.classes.hide);
-        $.setAttribute(this.node, { tabindex: -1 });
+        $.setAttribute(this.node, {
+            'tabindex': -1,
+            'aria-hidden': true,
+        });
         $.before(this.node, this.#outerContainer);
 
         this.#rtl = $.css(this.#container, 'direction') === 'rtl';

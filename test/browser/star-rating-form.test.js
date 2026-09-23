@@ -1,4 +1,5 @@
 import { expect, test } from '#test';
+import { dispatchDragEvent } from '../setup/drag.js';
 
 test.use({ mockClock: true });
 
@@ -34,6 +35,33 @@ test.describe('StarRating form resets', () => {
         });
     }
 
+    test('handles an input associated with an external form', async ({ page }) => {
+        await page.evaluate((_) => {
+            $.append(document.body, '<input id="external" type="number" form="form" value="3">');
+            UI.StarRating.init($.findOne('#external'), { tooltip: false }).setValue(5);
+            $.findOne('#form').reset();
+        });
+        await page.clock.runFor(1);
+
+        await expect(page.locator('#external')).toHaveValue('3');
+        await expect(page.locator('.starrating').last()).toHaveAttribute('aria-valuenow', '3');
+    });
+
+    test('refreshes read-only ratings and tooltip text', async ({ page }) => {
+        await page.evaluate((_) => {
+            const input = $.findOne('#rating');
+            $.getData(input, 'starrating').dispose();
+            input.readOnly = true;
+            UI.StarRating.init(input).setValue(4);
+            input.form.reset();
+        });
+        await page.clock.runFor(1);
+
+        await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2');
+        await expect(page.locator('.starrating')).toHaveAttribute('aria-valuetext', '2 stars');
+        await expect(page.locator('.starrating')).toHaveAttribute('data-ui-title', '2 stars');
+    });
+
     test('respects a reset canceled by a later listener', async ({ page }) => {
         await page.evaluate((_) => {
             const input = $.findOne('#rating');
@@ -61,18 +89,6 @@ test.describe('StarRating form resets', () => {
         await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2');
     });
 
-    test('handles an input associated with an external form', async ({ page }) => {
-        await page.evaluate((_) => {
-            $.append(document.body, '<input id="external" type="number" form="form" value="3">');
-            UI.StarRating.init($.findOne('#external'), { tooltip: false }).setValue(5);
-            $.findOne('#form').reset();
-        });
-        await page.clock.runFor(1);
-
-        await expect(page.locator('#external')).toHaveValue('3');
-        await expect(page.locator('.starrating').last()).toHaveAttribute('aria-valuenow', '3');
-    });
-
     test('preserves a value set after the native reset', async ({ page }) => {
         await page.evaluate((_) => {
             const input = $.findOne('#rating');
@@ -83,21 +99,6 @@ test.describe('StarRating form resets', () => {
 
         await expect(page.locator('#rating')).toHaveValue('4');
         await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '4');
-    });
-
-    test('refreshes read-only ratings and tooltip text', async ({ page }) => {
-        await page.evaluate((_) => {
-            const input = $.findOne('#rating');
-            $.getData(input, 'starrating').dispose();
-            input.readOnly = true;
-            UI.StarRating.init(input).setValue(4);
-            input.form.reset();
-        });
-        await page.clock.runFor(1);
-
-        await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2');
-        await expect(page.locator('.starrating')).toHaveAttribute('aria-valuetext', '2 stars');
-        await expect(page.locator('.starrating')).toHaveAttribute('data-ui-title', '2 stars');
     });
 
     test('ignores a pending reset after disposal and preserves other listeners', async ({ page }) => {
@@ -124,60 +125,21 @@ test.describe('StarRating form resets', () => {
     });
 });
 
-test.describe('StarRating interrupted drags', () => {
+test.describe('StarRating resets during drags', () => {
     for (const pointer of ['mouse', 'touch']) {
         test.describe(`${pointer} drag`, () => {
             test.beforeEach(async ({ page }) => {
-                await page.evaluate((pointer) => {
+                await page.evaluate((_) => {
                     const input = $.findOne('#rating');
                     const component = $.getData(input, 'starrating');
                     component.dispose();
                     UI.StarRating.init(input);
-                    const slider = $.findOne('.starrating');
-                    const rect = slider.getBoundingClientRect();
-                    window.dragEvent = (phase, fraction) => {
-                        const x = rect.left + (rect.width * fraction);
-                        const y = rect.top + (rect.height / 2);
-                        const target = phase === 'start' ? slider : window;
-                        if (pointer === 'mouse') {
-                            const type = { start: 'mousedown', move: 'mousemove', end: 'mouseup' }[phase];
-                            target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y }));
-                        } else {
-                            const type = { start: 'touchstart', move: 'touchmove', end: 'touchend' }[phase];
-                            const event = new Event(type, { bubbles: true, cancelable: true });
-                            Object.defineProperty(event, 'touches', { value: phase === 'end' ? [] : [{ pageX: x, pageY: y }] });
-                            Object.defineProperty(event, 'changedTouches', { value: [{ pageX: x, pageY: y }] });
-                            target.dispatchEvent(event);
-                        }
-                    };
-                    window.dragEvent('start', .1);
-                    window.dragEvent('move', .5);
                     window.interruptedChanges = 0;
                     $.addEvent(input, 'change.ui.starrating', (_) => window.interruptedChanges++);
-                }, pointer);
-            });
-
-            test('disabling ends the drag and preserves the committed value', async ({ page }) => {
-                await page.evaluate((_) => $.getData('#rating', 'starrating').disable());
-                await page.clock.runFor(1);
-
-                await expect(page.locator('#rating')).toBeDisabled();
-                await expect(page.locator('#rating')).toHaveValue('2.5');
-                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2.5');
-                expect(await page.locator('.starrating-filled').evaluate((node) => node.style.transition)).toBe('');
-                await page.locator('#other').focus();
-                await expect(page.locator('.tooltip')).toHaveCount(0);
-
-                await page.evaluate((_) => {
-                    window.dragEvent('move', .9);
-                    window.dragEvent('end', .9);
                 });
-                await expect(page.locator('#rating')).toHaveValue('2.5');
-                expect(await page.evaluate((_) => window.interruptedChanges)).toBe(0);
-
-                await page.evaluate((_) => $.getData('#rating', 'starrating').enable());
-                await page.locator('.starrating').press('ArrowUp');
-                await expect(page.locator('#rating')).toHaveValue('3');
+                await page.evaluate(dispatchDragEvent, { pointer, phase: 'start', fraction: .1 });
+                await page.evaluate(dispatchDragEvent, { pointer, phase: 'move', fraction: .5 });
+                await page.evaluate((_) => window.interruptedChanges = 0);
             });
 
             test('resetting ends the drag and restores the default value', async ({ page }) => {
@@ -190,10 +152,8 @@ test.describe('StarRating interrupted drags', () => {
                 await page.locator('#other').focus();
                 await expect(page.locator('.tooltip')).toHaveCount(0);
 
-                await page.evaluate((_) => {
-                    window.dragEvent('move', .9);
-                    window.dragEvent('end', .9);
-                });
+                await page.evaluate(dispatchDragEvent, { pointer, phase: 'move', fraction: .9 });
+                await page.evaluate(dispatchDragEvent, { pointer, phase: 'end', fraction: .9 });
                 await expect(page.locator('#rating')).toHaveValue('2');
                 expect(await page.evaluate((_) => window.interruptedChanges)).toBe(0);
 
@@ -212,10 +172,8 @@ test.describe('StarRating interrupted drags', () => {
                 await expect(page.locator('#rating')).toHaveValue('2.5');
                 await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2.5');
 
-                await page.evaluate((_) => {
-                    window.dragEvent('move', .9);
-                    window.dragEvent('end', .9);
-                });
+                await page.evaluate(dispatchDragEvent, { pointer, phase: 'move', fraction: .9 });
+                await page.evaluate(dispatchDragEvent, { pointer, phase: 'end', fraction: .9 });
                 await expect(page.locator('#rating')).toHaveValue('4.5');
                 expect(await page.evaluate((_) => window.interruptedChanges)).toBe(1);
 
@@ -224,55 +182,4 @@ test.describe('StarRating interrupted drags', () => {
             });
         });
     }
-
-    for (const action of ['disable', 'dispose']) {
-        test(`cancels drag startup when a focus handler calls ${action}`, async ({ page }) => {
-            const errors = [];
-            page.on('pageerror', (error) => errors.push(error.message));
-            await page.evaluate((action) => {
-                const input = $.findOne('#rating');
-                const component = $.getData(input, 'starrating');
-                const slider = $.findOne('.starrating');
-                const rect = slider.getBoundingClientRect();
-                window.focusChanges = 0;
-                input.addEventListener('change', (_) => window.focusChanges++);
-                slider.addEventListener('focus', (_) => component[action](), { once: true });
-                slider.dispatchEvent(new MouseEvent('mousedown', {
-                    button: 0,
-                    clientX: rect.left + (rect.width * .9),
-                }));
-                window.dispatchEvent(new MouseEvent('mousemove', { clientX: rect.right }));
-                window.dispatchEvent(new MouseEvent('mouseup', { clientX: rect.right }));
-            }, action);
-
-            await expect(page.locator('#rating')).toHaveValue('2');
-            if (action === 'disable') {
-                await expect(page.locator('#rating')).toBeDisabled();
-                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2');
-                expect(await page.locator('.starrating-filled').evaluate((node) => node.style.transition)).toBe('');
-            } else {
-                await expect(page.locator('.starrating')).toHaveCount(0);
-            }
-            expect(await page.evaluate((_) => window.focusChanges)).toBe(0);
-            expect(errors).toEqual([]);
-        });
-    }
-
-    test('does not retain a drag tooltip when a change handler disables the control', async ({ page }) => {
-        await page.evaluate((_) => {
-            const input = $.findOne('#rating');
-            $.getData(input, 'starrating').dispose();
-            const component = UI.StarRating.init(input);
-            $.addEvent(input, 'change.ui.starrating', (_) => component.disable());
-            const slider = $.findOne('.starrating');
-            const rect = slider.getBoundingClientRect();
-            slider.dispatchEvent(new MouseEvent('mousedown', { button: 0, clientX: rect.left + (rect.width * .5) }));
-        });
-        await page.locator('#other').focus();
-
-        await expect(page.locator('#rating')).toBeDisabled();
-        await expect(page.locator('#rating')).toHaveValue('2.5');
-        await expect(page.locator('.tooltip')).toHaveCount(0);
-        expect(await page.locator('.starrating-filled').evaluate((node) => node.style.transition)).toBe('');
-    });
 });

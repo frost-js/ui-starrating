@@ -1,4 +1,5 @@
 import { expect, test } from '#test';
+import { dispatchDragEvent } from '../setup/drag.js';
 
 test.describe('StarRating', () => {
     test.beforeEach(async ({ page }) => {
@@ -239,26 +240,27 @@ test.describe('StarRating', () => {
         });
 
         test('disposes automatically when the original input is removed', async ({ page }) => {
-            await page.evaluate((_) => {
+            const instance = await page.evaluateHandle((_) => {
                 const input = $.findOne('#rating');
-                window.removedComponent = UI.StarRating.init(input, { tooltip: false });
+                const component = UI.StarRating.init(input, { tooltip: false });
                 $.remove(input);
+                return component;
             });
 
             await expect(page.locator('#rating')).toHaveCount(0);
             await expect(page.locator('.starrating')).toHaveCount(0);
-            expect(await page.evaluate((_) => window.removedComponent.node)).toBeNull();
-            expect(await page.evaluate((_) => window.removedComponent.options)).toBeNull();
+            expect(await instance.evaluate((value) => value.node)).toBeNull();
+            expect(await instance.evaluate((value) => value.options)).toBeNull();
         });
 
         test('cleans up an active drag and visible tooltip safely', async ({ page }) => {
-            await page.evaluate((_) => {
+            const errors = [];
+            page.on('pageerror', (error) => errors.push(error.message));
+            const instance = await page.evaluateHandle((_) => {
                 const input = $.findOne('#rating');
                 const component = UI.StarRating.init(input);
                 const slider = $.findOne('.starrating');
                 const rect = slider.getBoundingClientRect();
-                window.disposalErrors = 0;
-                window.addEventListener('error', (_) => window.disposalErrors++);
                 $.focus(slider);
                 slider.dispatchEvent(new MouseEvent('mousedown', {
                     bubbles: true,
@@ -272,13 +274,13 @@ test.describe('StarRating', () => {
                 window.dispatchEvent(new MouseEvent('mouseup', {
                     clientX: rect.right,
                 }));
-                window.dragDisposedComponent = component;
+                return component;
             });
 
             await expect(page.locator('.starrating')).toHaveCount(0);
             await expect(page.locator('.tooltip')).toHaveCount(0);
-            expect(await page.evaluate((_) => window.disposalErrors)).toBe(0);
-            expect(await page.evaluate((_) => window.dragDisposedComponent.node)).toBeNull();
+            expect(errors).toEqual([]);
+            expect(await instance.evaluate((value) => value.node)).toBeNull();
         });
     });
 
@@ -301,6 +303,32 @@ test.describe('StarRating', () => {
                 await expect(slider).toHaveAttribute('tabindex', '-1');
             });
         }
+
+        test('ignores user interaction when disabled', async ({ page }) => {
+            await page.evaluate((_) => {
+                $.setValue('#rating', 2);
+                UI.StarRating.init($.findOne('#rating'), { tooltip: false }).disable();
+                const slider = $.findOne('.starrating');
+                const rect = slider.getBoundingClientRect();
+                slider.dispatchEvent(new MouseEvent('mousedown', {
+                    bubbles: true,
+                    button: 0,
+                    clientX: rect.right,
+                }));
+                slider.dispatchEvent(new KeyboardEvent('keydown', {
+                    bubbles: true,
+                    cancelable: true,
+                    code: 'ArrowRight',
+                }));
+            });
+
+            const slider = page.locator('.starrating');
+            await expect(page.locator('#rating')).toHaveValue('2');
+            await expect(slider).toHaveClass(/starrating-disabled/);
+            await expect(slider).toHaveAttribute('aria-disabled', 'true');
+            await expect(slider).toHaveAttribute('tabindex', '-1');
+            await expect(slider).toHaveCSS('pointer-events', 'none');
+        });
 
         test('restores the committed rating when disabled during a hover preview', async ({ page }) => {
             await page.evaluate((_) => {
@@ -612,239 +640,319 @@ test.describe('StarRating', () => {
     });
 
     test.describe('user events', () => {
-        test('sets a value with a primary mouse click', async ({ page }) => {
-            await page.evaluate((_) => {
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
-            });
-
-            const slider = page.locator('.starrating');
-            const box = await slider.boundingBox();
-            await page.mouse.click(box.x + (box.width / 2), box.y + (box.height / 2));
-            await expect(page.locator('#rating')).toHaveValue('3');
-            await expect(slider).toHaveAttribute('aria-valuenow', '3');
-            await expect(slider).toBeFocused();
-        });
-
-        test('drags with the mouse in both directions', async ({ page }) => {
-            await page.evaluate((_) => {
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
-            });
-
-            const slider = page.locator('.starrating');
-            const box = await slider.boundingBox();
-            const y = box.y + (box.height / 2);
-            await page.mouse.move(box.x + 1, y);
-            await page.mouse.down();
-            await page.mouse.move(box.x + box.width - 1, y);
-            await page.mouse.up();
-            await expect(page.locator('#rating')).toHaveValue('5');
-
-            await page.mouse.move(box.x + box.width - 1, y);
-            await page.mouse.down();
-            await page.mouse.move(box.x + 1, y);
-            await page.mouse.up();
-            await expect(page.locator('#rating')).toHaveValue('1');
-        });
-
-        test('drags with touch and prevents handled touch movement', async ({ page }) => {
-            await page.evaluate((_) => {
-                const input = $.findOne('#rating');
-                UI.StarRating.init(input, { tooltip: false });
-                const slider = $.findOne('.starrating');
-                const rect = slider.getBoundingClientRect();
-                const y = rect.top + (rect.height / 2);
-                const dispatchTouch = (target, type, x, active) => {
-                    const event = new Event(type, {
-                        bubbles: true,
-                        cancelable: true,
-                    });
-                    Object.defineProperty(event, 'touches', {
-                        value: active ? [{ pageX: x, pageY: y }] : [],
-                    });
-                    target.dispatchEvent(event);
-                    return event.defaultPrevented;
-                };
-
-                dispatchTouch(slider, 'touchstart', rect.left + (rect.width * .2), true);
-                window.touchMovePrevented = dispatchTouch(
-                    window,
-                    'touchmove',
-                    rect.left + (rect.width * .7),
-                    true,
-                );
-                dispatchTouch(window, 'touchend', rect.left + (rect.width * .7), false);
-            });
-
-            await expect(page.locator('#rating')).toHaveValue('4');
-            expect(await page.evaluate((_) => window.touchMovePrevented)).toBe(true);
-            await expect(page.locator('.starrating-filled')).toHaveCSS(
-                'transition-property',
-                'width',
-            );
-        });
-
-        test('ignores secondary and invalid pointer input', async ({ page }) => {
-            await page.evaluate((_) => {
-                const input = $.findOne('#rating');
-                UI.StarRating.init(input, { tooltip: false });
-                const slider = $.findOne('.starrating');
-                slider.dispatchEvent(new MouseEvent('mousedown', {
-                    bubbles: true,
-                    button: 1,
-                    clientX: 400,
-                }));
-                slider.dispatchEvent(new Event('mousedown', {
-                    bubbles: true,
-                    cancelable: true,
-                }));
-            });
-
-            await expect(page.locator('#rating')).toHaveValue('');
-            await expect(page.locator('.starrating-filled')).not.toHaveAttribute(
-                'style',
-                /NaN|Infinity/,
-            );
-        });
-
-        for (const { key, value } of [
-            { key: 'ArrowRight', value: '3' },
-            { key: 'ArrowLeft', value: '1' },
-            { key: 'ArrowUp', value: '3' },
-            { key: 'ArrowDown', value: '1' },
-            { key: 'PageUp', value: '3' },
-            { key: 'PageDown', value: '1' },
-            { key: 'End', value: '5' },
-            { key: 'Home', value: '0' },
-        ]) {
-            test(`handles ${key} and prevents its default action`, async ({ page }) => {
+        test.describe('click', () => {
+            test('sets a value with a primary mouse click', async ({ page }) => {
                 await page.evaluate((_) => {
-                    $.setValue('#rating', 2);
                     UI.StarRating.init($.findOne('#rating'), { tooltip: false });
-                    $.findOne('.starrating').addEventListener('keydown', (event) => {
-                        window.keyDefaultPrevented = event.defaultPrevented;
-                    });
                 });
 
-                await page.locator('.starrating').press(key);
-                await expect(page.locator('#rating')).toHaveValue(value);
-                expect(await page.evaluate((_) => window.keyDefaultPrevented)).toBe(true);
-            });
-        }
-
-        test('moves by at least one step with Page keys when the step exceeds one', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setAttribute('#rating', { step: '2' });
-                $.setValue('#rating', 4);
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+                const slider = page.locator('.starrating');
+                const box = await slider.boundingBox();
+                await page.mouse.click(box.x + (box.width / 2), box.y + (box.height / 2));
+                await expect(page.locator('#rating')).toHaveValue('3');
+                await expect(slider).toHaveAttribute('aria-valuenow', '3');
+                await expect(slider).toBeFocused();
             });
 
-            const input = page.locator('#rating');
-            const slider = page.locator('.starrating');
-            await slider.press('PageDown');
-            await expect(input).toHaveValue('2');
-            await expect(slider).toHaveAttribute('aria-valuenow', '2');
-            await slider.press('PageUp');
-            await expect(input).toHaveValue('4');
-            await slider.press('PageUp');
-            await expect(input).toHaveValue('5');
-            await slider.press('PageUp');
-            await expect(input).toHaveValue('5');
-            await slider.press('Home');
-            await slider.press('PageDown');
-            await expect(input).toHaveValue('0');
-        });
+            test('ignores secondary and invalid pointer input', async ({ page }) => {
+                await page.evaluate((_) => {
+                    const input = $.findOne('#rating');
+                    UI.StarRating.init(input, { tooltip: false });
+                    const slider = $.findOne('.starrating');
+                    slider.dispatchEvent(new MouseEvent('mousedown', {
+                        bubbles: true,
+                        button: 1,
+                        clientX: 400,
+                    }));
+                    slider.dispatchEvent(new Event('mousedown', {
+                        bubbles: true,
+                        cancelable: true,
+                    }));
+                });
 
-        test('keeps the page position for handled slider keys', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setHtml(
-                    document.body,
-                    '<div style="height: 1200px"></div><input id="rating" type="number" value="2"><div style="height: 1200px"></div>',
+                await expect(page.locator('#rating')).toHaveValue('');
+                await expect(page.locator('.starrating-filled')).not.toHaveAttribute(
+                    'style',
+                    /NaN|Infinity/,
                 );
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
             });
-
-            const slider = page.locator('.starrating');
-            await slider.focus();
-            await page.evaluate((_) => window.scrollTo(0, 1000));
-            await expect.poll(async (_) =>
-                page.evaluate((_) => window.scrollY)).toBe(1000);
-            const initialScroll = await page.evaluate((_) => window.scrollY);
-            await slider.press('ArrowDown');
-            expect(await page.evaluate((_) => window.scrollY)).toBe(initialScroll);
         });
 
-        test('uses direction-aware horizontal keyboard behavior in RTL', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setAttribute('#rating', { dir: 'rtl' });
-                $.setValue('#rating', 2);
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+        test.describe('keyboard', () => {
+            for (const { key, value } of [
+                { key: 'ArrowRight', value: '3' },
+                { key: 'ArrowLeft', value: '1' },
+                { key: 'ArrowUp', value: '3' },
+                { key: 'ArrowDown', value: '1' },
+                { key: 'PageUp', value: '3' },
+                { key: 'PageDown', value: '1' },
+                { key: 'End', value: '5' },
+                { key: 'Home', value: '0' },
+            ]) {
+                test(`handles ${key} and prevents its default action`, async ({ page }) => {
+                    await page.evaluate((_) => {
+                        $.setValue('#rating', 2);
+                        UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+                        $.findOne('.starrating').addEventListener('keydown', (event) => {
+                            window.keyDefaultPrevented = event.defaultPrevented;
+                        });
+                    });
+
+                    await page.locator('.starrating').press(key);
+                    await expect(page.locator('#rating')).toHaveValue(value);
+                    expect(await page.evaluate((_) => window.keyDefaultPrevented)).toBe(true);
+                });
+            }
+
+            test('moves by at least one step with Page keys when the step exceeds one', async ({ page }) => {
+                await page.evaluate((_) => {
+                    $.setAttribute('#rating', { step: '2' });
+                    $.setValue('#rating', 4);
+                    UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+                });
+
+                const input = page.locator('#rating');
+                const slider = page.locator('.starrating');
+                await slider.press('PageDown');
+                await expect(input).toHaveValue('2');
+                await expect(slider).toHaveAttribute('aria-valuenow', '2');
+                await slider.press('PageUp');
+                await expect(input).toHaveValue('4');
+                await slider.press('PageUp');
+                await expect(input).toHaveValue('5');
+                await slider.press('PageUp');
+                await expect(input).toHaveValue('5');
+                await slider.press('Home');
+                await slider.press('PageDown');
+                await expect(input).toHaveValue('0');
             });
 
-            const input = page.locator('#rating');
-            const slider = page.locator('.starrating');
-            await expect(slider).toHaveAttribute('dir', 'rtl');
-            await slider.press('ArrowLeft');
-            await expect(input).toHaveValue('3');
-            await slider.press('ArrowRight');
-            await expect(input).toHaveValue('2');
+            test('keeps the page position for handled slider keys', async ({ page }) => {
+                await page.evaluate((_) => {
+                    $.setHtml(
+                        document.body,
+                        '<div style="height: 1200px"></div><input id="rating" type="number" value="2"><div style="height: 1200px"></div>',
+                    );
+                    UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+                });
+
+                const slider = page.locator('.starrating');
+                await slider.focus();
+                await page.evaluate((_) => window.scrollTo(0, 1000));
+                await expect.poll(async (_) =>
+                    page.evaluate((_) => window.scrollY)).toBe(1000);
+                const initialScroll = await page.evaluate((_) => window.scrollY);
+                await slider.press('ArrowDown');
+                expect(await page.evaluate((_) => window.scrollY)).toBe(initialScroll);
+            });
+
+            test('uses direction-aware horizontal keyboard behavior in RTL', async ({ page }) => {
+                await page.evaluate((_) => {
+                    $.setAttribute('#rating', { dir: 'rtl' });
+                    $.setValue('#rating', 2);
+                    UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+                });
+
+                const input = page.locator('#rating');
+                const slider = page.locator('.starrating');
+                await expect(slider).toHaveAttribute('dir', 'rtl');
+                await slider.press('ArrowLeft');
+                await expect(input).toHaveValue('3');
+                await slider.press('ArrowRight');
+                await expect(input).toHaveValue('2');
+            });
         });
 
-        test('ignores user interaction when disabled', async ({ page }) => {
-            await page.evaluate((_) => {
-                $.setValue('#rating', 2);
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false }).disable();
-                const slider = $.findOne('.starrating');
-                const rect = slider.getBoundingClientRect();
-                slider.dispatchEvent(new MouseEvent('mousedown', {
-                    bubbles: true,
-                    button: 0,
-                    clientX: rect.right,
-                }));
-                slider.dispatchEvent(new KeyboardEvent('keydown', {
-                    bubbles: true,
-                    cancelable: true,
-                    code: 'ArrowRight',
-                }));
-            });
+        test.describe('focus', () => {
+            test('forwards focus from the hidden input', async ({ page }) => {
+                await page.evaluate((_) => {
+                    UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+                    $.focus('#rating');
+                });
 
-            const slider = page.locator('.starrating');
-            await expect(page.locator('#rating')).toHaveValue('2');
-            await expect(slider).toHaveClass(/starrating-disabled/);
-            await expect(slider).toHaveAttribute('aria-disabled', 'true');
-            await expect(slider).toHaveAttribute('tabindex', '-1');
-            await expect(slider).toHaveCSS('pointer-events', 'none');
+                await expect(page.locator('.starrating')).toBeFocused();
+            });
         });
 
-        test('forwards focus from the hidden input', async ({ page }) => {
-            await page.evaluate((_) => {
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
-                $.focus('#rating');
+        test.describe('drag', () => {
+            test('drags with the mouse in both directions', async ({ page }) => {
+                await page.evaluate((_) => {
+                    UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+                });
+
+                const slider = page.locator('.starrating');
+                const box = await slider.boundingBox();
+                const y = box.y + (box.height / 2);
+                await page.mouse.move(box.x + 1, y);
+                await page.mouse.down();
+                await page.mouse.move(box.x + box.width - 1, y);
+                await page.mouse.up();
+                await expect(page.locator('#rating')).toHaveValue('5');
+
+                await page.mouse.move(box.x + box.width - 1, y);
+                await page.mouse.down();
+                await page.mouse.move(box.x + 1, y);
+                await page.mouse.up();
+                await expect(page.locator('#rating')).toHaveValue('1');
             });
 
-            await expect(page.locator('.starrating')).toBeFocused();
+            test('drags with touch and prevents handled touch movement', async ({ page }) => {
+                await page.evaluate((_) => {
+                    const input = $.findOne('#rating');
+                    UI.StarRating.init(input, { tooltip: false });
+                    const slider = $.findOne('.starrating');
+                    const rect = slider.getBoundingClientRect();
+                    const y = rect.top + (rect.height / 2);
+                    const dispatchTouch = (target, type, x, active) => {
+                        const event = new Event(type, {
+                            bubbles: true,
+                            cancelable: true,
+                        });
+                        Object.defineProperty(event, 'touches', {
+                            value: active ? [{ pageX: x, pageY: y }] : [],
+                        });
+                        target.dispatchEvent(event);
+                        return event.defaultPrevented;
+                    };
+
+                    dispatchTouch(slider, 'touchstart', rect.left + (rect.width * .2), true);
+                    window.touchMovePrevented = dispatchTouch(
+                        window,
+                        'touchmove',
+                        rect.left + (rect.width * .7),
+                        true,
+                    );
+                    dispatchTouch(window, 'touchend', rect.left + (rect.width * .7), false);
+                });
+
+                await expect(page.locator('#rating')).toHaveValue('4');
+                expect(await page.evaluate((_) => window.touchMovePrevented)).toBe(true);
+                await expect(page.locator('.starrating-filled')).toHaveCSS(
+                    'transition-property',
+                    'width',
+                );
+            });
+
+            for (const pointer of ['mouse', 'touch']) {
+                test(`disabling ends a ${pointer} drag and preserves the committed value`, async ({ page }) => {
+                    await page.evaluate((_) => {
+                        $.setAttribute('#rating', { step: '.5', value: '2' });
+                        UI.StarRating.init($.findOne('#rating'));
+                        window.interruptedChanges = 0;
+                        $.addEvent('#rating', 'change.ui.starrating', (_) => window.interruptedChanges++);
+                    });
+                    await page.evaluate(dispatchDragEvent, { pointer, phase: 'start', fraction: .1 });
+                    await page.evaluate(dispatchDragEvent, { pointer, phase: 'move', fraction: .5 });
+                    await page.evaluate((_) => window.interruptedChanges = 0);
+                    await page.evaluate((_) => $.getData('#rating', 'starrating').disable());
+
+                    await expect(page.locator('#rating')).toBeDisabled();
+                    await expect(page.locator('#rating')).toHaveValue('2.5');
+                    await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2.5');
+                    expect(await page.locator('.starrating-filled').evaluate((node) => node.style.transition)).toBe('');
+                    await page.locator('#rating2').focus();
+                    await expect(page.locator('.tooltip')).toHaveCount(0);
+
+                    await page.evaluate(dispatchDragEvent, { pointer, phase: 'move', fraction: .9 });
+                    await page.evaluate(dispatchDragEvent, { pointer, phase: 'end', fraction: .9 });
+                    await expect(page.locator('#rating')).toHaveValue('2.5');
+                    expect(await page.evaluate((_) => window.interruptedChanges)).toBe(0);
+
+                    await page.evaluate((_) => $.getData('#rating', 'starrating').enable());
+                    await page.locator('.starrating').press('ArrowUp');
+                    await expect(page.locator('#rating')).toHaveValue('3');
+                });
+            }
+
+            test('cancels drag startup when a focus handler calls disable', async ({ page }) => {
+                const errors = [];
+                page.on('pageerror', (error) => errors.push(error.message));
+                await page.evaluate((_) => {
+                    const input = $.findOne('#rating');
+                    $.setAttribute(input, { step: '.5', value: '2' });
+                    const component = UI.StarRating.init(input, { tooltip: false });
+                    const slider = $.findOne('.starrating');
+                    const rect = slider.getBoundingClientRect();
+                    window.focusChanges = 0;
+                    input.addEventListener('change', (_) => window.focusChanges++);
+                    slider.addEventListener('focus', (_) => component.disable(), { once: true });
+                    slider.dispatchEvent(new MouseEvent('mousedown', {
+                        button: 0,
+                        clientX: rect.left + (rect.width * .9),
+                    }));
+                    window.dispatchEvent(new MouseEvent('mousemove', { clientX: rect.right }));
+                    window.dispatchEvent(new MouseEvent('mouseup', { clientX: rect.right }));
+                });
+
+                await expect(page.locator('#rating')).toHaveValue('2');
+                await expect(page.locator('#rating')).toBeDisabled();
+                await expect(page.locator('.starrating')).toHaveAttribute('aria-valuenow', '2');
+                expect(await page.locator('.starrating-filled').evaluate((node) => node.style.transition)).toBe('');
+                expect(await page.evaluate((_) => window.focusChanges)).toBe(0);
+                expect(errors).toEqual([]);
+            });
+
+            test('cancels drag startup when a focus handler calls dispose', async ({ page }) => {
+                const errors = [];
+                page.on('pageerror', (error) => errors.push(error.message));
+                await page.evaluate((_) => {
+                    const input = $.findOne('#rating');
+                    $.setAttribute(input, { step: '.5', value: '2' });
+                    const component = UI.StarRating.init(input, { tooltip: false });
+                    const slider = $.findOne('.starrating');
+                    const rect = slider.getBoundingClientRect();
+                    window.focusChanges = 0;
+                    input.addEventListener('change', (_) => window.focusChanges++);
+                    slider.addEventListener('focus', (_) => component.dispose(), { once: true });
+                    slider.dispatchEvent(new MouseEvent('mousedown', {
+                        button: 0,
+                        clientX: rect.left + (rect.width * .9),
+                    }));
+                    window.dispatchEvent(new MouseEvent('mousemove', { clientX: rect.right }));
+                    window.dispatchEvent(new MouseEvent('mouseup', { clientX: rect.right }));
+                });
+
+                await expect(page.locator('#rating')).toHaveValue('2');
+                await expect(page.locator('.starrating')).toHaveCount(0);
+                expect(await page.evaluate((_) => window.focusChanges)).toBe(0);
+                expect(errors).toEqual([]);
+            });
+
+            test('does not retain a drag tooltip when a change handler disables the control', async ({ page }) => {
+                await page.evaluate((_) => {
+                    const input = $.findOne('#rating');
+                    $.setAttribute(input, { step: '.5', value: '2' });
+                    const component = UI.StarRating.init(input);
+                    $.addEvent(input, 'change.ui.starrating', (_) => component.disable());
+                    const slider = $.findOne('.starrating');
+                    const rect = slider.getBoundingClientRect();
+                    slider.dispatchEvent(new MouseEvent('mousedown', { button: 0, clientX: rect.left + (rect.width * .5) }));
+                });
+                await page.locator('#rating2').focus();
+
+                await expect(page.locator('#rating')).toBeDisabled();
+                await expect(page.locator('#rating')).toHaveValue('2.5');
+                await expect(page.locator('.tooltip')).toHaveCount(0);
+                expect(await page.locator('.starrating-filled').evaluate((node) => node.style.transition)).toBe('');
+            });
         });
     });
 
     test.describe('animate option', () => {
-        test('renders an animated wrapper by default', async ({ page }) => {
-            await page.evaluate((_) => {
-                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+        for (const { name, options, count } of [
+            { name: 'by default', options: {}, count: 1 },
+            { name: 'when disabled', options: { animate: false }, count: 0 },
+        ]) {
+            test(`renders ${count} animated wrappers ${name}`, async ({ page }) => {
+                await page.evaluate((options) => {
+                    UI.StarRating.init($.findOne('#rating'), { ...options, tooltip: false });
+                }, options);
+
+                await expect(page.locator('.starrating-animate')).toHaveCount(count);
+                await expect(page.locator('.starrating-animate > .starrating')).toHaveCount(count);
+                await expect(page.locator('.starrating')).toHaveCount(1);
             });
-
-            await expect(page.locator('.starrating-animate > .starrating')).toHaveCount(1);
-        });
-
-        test('does not render an animated wrapper when disabled', async ({ page }) => {
-            await page.evaluate((_) => {
-                UI.StarRating.init($.findOne('#rating'), {
-                    animate: false,
-                    tooltip: false,
-                });
-            });
-
-            await expect(page.locator('.starrating-animate')).toHaveCount(0);
-            await expect(page.locator('.starrating')).toHaveCount(1);
-        });
+        }
     });
 
     test.describe('displayOnly option', () => {

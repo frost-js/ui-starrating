@@ -18,7 +18,7 @@ Accessible star-rating control for Frost UI with fractional values, configurable
 - Keyboard, mouse, touch drag, and optional hover-preview interaction
 - Direction-aware filling, pointer values, and horizontal keys in RTL
 - Accessible slider state, native labels, required and disabled state, and display-only mode
-- Frost UI v3 light, dark, system, reduced-motion, focus, and forced-colors presentation
+- Frost UI v4 light, dark, system, reduced-motion, focus, and forced-colors presentation
 - Native `StarRating` class and `starrating` fQuery plugin
 - Existing-instance reuse with frozen resolved options
 - Reversible disposal that restores the input's original visibility and `tabindex`
@@ -29,19 +29,19 @@ Accessible star-rating control for Frost UI with fractional values, configurable
 
 StarRating follows Frost UI's modern Baseline browser policy. JavaScript bundles target Vite's `baseline-widely-available` target, while stylesheet processing uses the package's `baseline newly available` Browserslist query.
 
-Continuous integration runs the browser suite in Chromium on Node 20, 22, and 24, and in Firefox and WebKit on Node 24. Internet Explorer is not supported. StarRating requires a browser DOM or a compatible DOM environment configured through fQuery; server-rendered applications should load it on the client.
+Continuous integration runs the browser suite in Chromium on Node 20, 22, and 24, and in Firefox and WebKit on Node 24. Internet Explorer is not supported.
 
 ## Installation
 
 ### Browser projects / bundlers
 
-Install StarRating with its Frost UI and fQuery peers:
+Install StarRating with its Frost UI v4 and fQuery v5 peers:
 
 ```bash
 npm i @fr0st/ui-starrating @fr0st/ui @fr0st/query
 ```
 
-Import both required stylesheets and the default component export:
+The package root resolves to the compiled ESM bundle. Import both required stylesheets and the default component export:
 
 ```js
 import '@fr0st/ui/dist/frost-ui.min.css';
@@ -57,9 +57,9 @@ const rating = StarRating.init(
 );
 ```
 
-`@fr0st/ui` and `@fr0st/query` are peer dependencies, so StarRating shares the application's UI and fQuery instances instead of bundling duplicate copies.
+StarRating v4 requires `@fr0st/ui ^4.0.0` and `@fr0st/query ^5.0.0` as peer dependencies so the component shares the application's UI and fQuery instances. The package root, `dist/*`, and `src/*` are available through package exports.
 
-The package root resolves to `dist/frost-ui-starrating.esm.js`. The package root, `dist/*`, and `src/*` are available through package exports; other undeclared subpaths are intentionally blocked. `main` and `module` both reference the compiled ESM build, while `jsdelivr` and `unpkg` reference the minified UMD build.
+StarRating requires a browser DOM or a compatible DOM environment configured through fQuery. Server-rendered applications should load the component on the client.
 
 ### Browser (ESM)
 
@@ -91,7 +91,7 @@ The ESM bundle imports `@fr0st/ui` and `@fr0st/query`. Frost UI and fQuery also 
 
 ### Browser (UMD)
 
-Load Frost UI's all-in-one bundle before StarRating. The UI bundle supplies both globals expected by the component:
+Load Frost UI's all-in-one bundle before StarRating. The UI bundle supplies both the `UI` and `fQuery` globals expected by the component:
 
 ```html
 <link
@@ -111,6 +111,8 @@ Load Frost UI's all-in-one bundle before StarRating. The UI bundle supplies both
 ```
 
 The UMD bundle adds `StarRating` to the existing `globalThis.UI` object. It expects `globalThis.UI` and `globalThis.fQuery` to exist before it loads. If the non-bundled Frost UI build is used instead, load fQuery, Frost UI, and StarRating in that order.
+
+Do not load the separate fQuery script when using `frost-ui-bundle.js` or `frost-ui-bundle.min.js`.
 
 ## Usage
 
@@ -154,7 +156,9 @@ Component options are resolved in this order:
 2. The input's `data-ui-*` attributes
 3. Options passed to `StarRating.init()`
 
-Resolved `instance.options` are frozen. Native input state is then applied without modifying that object: `min`, `max`, and `step` attributes override their matching resolved options; native `readonly` enables display-only behavior; and the input's current value supplies the initial rating. Native `disabled`, `required`, labels, ARIA attributes, and direction also remain authoritative.
+Resolved `instance.options` are frozen. Native input state is applied during initialization without modifying that object: `min`, `max`, and `step` attributes override their matching resolved options; native `readonly` enables display-only behavior; and the input's current value supplies the initial rating. The initial disabled and required state, accessible label attributes, associated labels, and direction also come from the input and its DOM context.
+
+Dispose and reinitialize to apply changes to the range, step, read-only mode, labels, or direction; use `disable()` and `enable()` to change disabled state.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -184,7 +188,7 @@ const rating = StarRating.init(node, {
 });
 ```
 
-The effective range is clamped between zero and the rendered star count. Finite values are clamped to that range. Numeric steps are anchored at the effective minimum, and intermediate values advance to the next valid step; the exact minimum and maximum remain selectable. Decimal and exponent precision is preserved. Invalid or non-finite programmatic values are ignored, and invalid steps safely behave like `step="any"`.
+The effective range is clamped between zero and the rendered star count. Finite values are clamped to that range. Numeric steps are anchored at the effective minimum, and intermediate values advance to the next valid step; the exact minimum and maximum remain selectable. Decimal and exponent steps are supported within JavaScript numeric precision. When a step is too small for reliable snapping, the clamped value is retained instead of introducing rounding drift or an invalid value. Invalid or non-finite programmatic values are ignored, and invalid steps safely behave like `step="any"`.
 
 ## Data attributes
 
@@ -228,7 +232,7 @@ The `data-ui-toggle` attribute does not initialize StarRating by itself. Use nat
 | Method | Returns | Description |
 | --- | --- | --- |
 | `StarRating.init(node, options?)` | `StarRating` | Return the existing instance for an input or create one. |
-| `disable()` | `void` | Disable the number input and make the rendered slider unavailable and unfocusable. |
+| `disable()` | `void` | Disable the number input, cancel dragging and hover previews, restore the committed rating, and remove the slider from the tab order. |
 | `dispose()` | `void` | Remove generated markup and events, unregister component state, and restore the original input. |
 | `enable()` | `void` | Enable the number input and restore slider interaction. |
 | `getValue()` | `number \| null` | Return the current finite rating, or `null` when the input is empty or invalid. |
@@ -267,7 +271,9 @@ $.addEvent(
 
 The underlying event type is `change`; fQuery exposes `event.namespace` as `ui.starrating`. Setting or selecting the current normalized value again does not emit another event. Hover preview changes only the visible fill and tooltip; it does not commit a value or change the slider's accessible value. A change event dispatched on the input refreshes the rendered control from the native value.
 
-Native form resets refresh the visible rating, accessible value, and tooltip after the browser restores the input, without emitting a change event. Canceled resets leave the current interaction intact. Calling `disable()` during a drag stops the drag and preserves the latest committed value.
+Native form resets cancel active dragging and refresh the visible rating, accessible value, and tooltip after the browser restores the input, without emitting a change event. This also works for read-only ratings and inputs associated with an external form through the `form` attribute. Canceled resets leave the current interaction intact.
+
+Calling `disable()` stops an active drag, clears any hover preview, and restores the latest committed rating and tooltip text without emitting a change event. If a focus or change handler disables or disposes the component during drag startup, startup stops.
 
 ## fQuery API
 
@@ -339,7 +345,7 @@ The component stylesheet exposes these CSS custom properties:
 
 ## Themes and RTL
 
-StarRating combines its component stylesheet with Frost UI v3 transition, focus-ring, disabled, and reduced-motion tokens. Frost UI follows the user's preferred color scheme by default. Set `data-ui-theme="light"` or `data-ui-theme="dark"` on the document or an ancestor to select a theme explicitly:
+StarRating combines its component stylesheet with Frost UI v4 transition, focus-ring, disabled, and reduced-motion tokens. Frost UI follows the user's preferred color scheme by default. Set `data-ui-theme="light"` or `data-ui-theme="dark"` on the document or an ancestor to select a theme explicitly:
 
 ```html
 <section data-ui-theme="dark">
@@ -371,21 +377,23 @@ const compactRating = StarRating.init(node, { size: 'sm' });
 
 ## Development
 
-Development requires Node `^20.19.0`, `^22.13.0`, or `>=24`.
+The npm override keeps `baseline-browser-mapping` at `2.11.20`: newer mapping data currently makes `baseline newly available` resolve to an incomplete or empty browser list with the installed Can I Use data. Revisit the override when those datasets align, and verify the resolved browser targets and generated CSS before removing it.
 
-The npm override keeps `baseline-browser-mapping` at `2.11.20`: newer mapping data currently makes `baseline newly available` resolve to no browsers with the installed Can I Use data, removing required CSS prefixes. Revisit the override when those datasets align, and verify the resolved browser targets and generated CSS before removing it.
+Use Node.js matching `^20.19.0 || ^22.13.0 || >=24`. Install dependencies with `npm ci`, then install Playwright browsers with `npx playwright install --with-deps`.
 
 ```bash
-npm ci
 npm test
 npm run lint
-npm run lint:sass:unused
 npm run build
-npm run test:browser
-npm run test:coverage
 ```
 
-`npm test` builds the bundles and runs the Playwright suite in Chromium, Firefox, and WebKit. Use `npm run test:headed` for headed browsers or `npm run test:ui` for Playwright's interactive runner.
+`npm test` rebuilds JavaScript and CSS, then runs the Playwright suite in Chromium, Firefox, and WebKit. `npm run test:browser` runs the suite against the existing bundles, so rebuild after changing source files.
+
+After building, `npm run test:coverage` runs Chromium tests and writes coverage reports to `coverage/`.
+
+`npm run test:headed` and `npm run test:ui` also use the existing bundles and open headed browsers or the Playwright UI.
+
+`npm run lint:sass:unused` checks for unused Sass variables.
 
 ## License
 

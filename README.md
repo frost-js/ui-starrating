@@ -371,6 +371,8 @@ const compactRating = StarRating.init(node, { size: 'sm' });
 
 Development requires Node `^20.19.0`, `^22.13.0`, or `>=24`.
 
+The npm override keeps `baseline-browser-mapping` at `2.11.20`: newer mapping data currently makes `baseline newly available` resolve to no browsers with the installed Can I Use data, removing required CSS prefixes. Revisit the override when those datasets align, and verify the resolved browser targets and generated CSS before removing it.
+
 ```bash
 npm ci
 npm test

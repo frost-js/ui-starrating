@@ -300,7 +300,7 @@ Pass an options object to initialize every matched input, or pass a public metho
 - An input `aria-label` is copied when no label references are available.
 - Labels without IDs receive temporary generated IDs while the component is active.
 - The rendered slider enters the tab order while the original input becomes visually hidden and receives `tabindex="-1"`.
-- Arrow Up and Arrow Down increase and decrease by one step. Arrow Left and Arrow Right are direction-aware. Page Up and Page Down change by one whole rating point. Home and End select the effective minimum and maximum.
+- Arrow Up and Arrow Down increase and decrease by one step. Arrow Left and Arrow Right are direction-aware. Page Up and Page Down use the larger of one rating point or one step, subject to step snapping and range limits. Home and End select the effective minimum and maximum.
 - Handled slider keys prevent page scrolling.
 - Disabled ratings leave the tab order and ignore keyboard and pointer interaction.
 - Display-only and native read-only ratings expose `aria-readonly="true"`, remain focusable, and do not install editing handlers.

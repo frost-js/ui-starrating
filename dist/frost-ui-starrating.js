@@ -240,10 +240,10 @@ _fr0st_query = __toESM(_fr0st_query, 1);
 						value = this.#min;
 						break;
 					case "PageDown":
-						value--;
+						value -= Math.max(1, step);
 						break;
 					case "PageUp":
-						value++;
+						value += Math.max(1, step);
 						break;
 					default: return;
 				}

@@ -208,10 +208,10 @@ var StarRating = class extends BaseComponent {
 					value = this.#min;
 					break;
 				case "PageDown":
-					value--;
+					value -= Math.max(1, step);
 					break;
 				case "PageUp":
-					value++;
+					value += Math.max(1, step);
 					break;
 				default: return;
 			}

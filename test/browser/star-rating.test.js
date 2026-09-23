@@ -762,6 +762,29 @@ test.describe('StarRating', () => {
             })).toBe(true);
         });
 
+        test('moves by at least one step with Page keys when the step exceeds one', async ({ page }) => {
+            await page.evaluate((_) => {
+                $.setAttribute('#rating', { step: '2' });
+                $.setValue('#rating', 4);
+                UI.StarRating.init($.findOne('#rating'), { tooltip: false });
+            });
+
+            const input = page.locator('#rating');
+            const slider = page.locator('.starrating');
+            await slider.press('PageDown');
+            await expect(input).toHaveValue('2');
+            await expect(slider).toHaveAttribute('aria-valuenow', '2');
+            await slider.press('PageUp');
+            await expect(input).toHaveValue('4');
+            await slider.press('PageUp');
+            await expect(input).toHaveValue('5');
+            await slider.press('PageUp');
+            await expect(input).toHaveValue('5');
+            await slider.press('Home');
+            await slider.press('PageDown');
+            await expect(input).toHaveValue('0');
+        });
+
         test('keeps the page position for handled slider keys', async ({ page }) => {
             await page.evaluate((_) => {
                 $.setHtml(
